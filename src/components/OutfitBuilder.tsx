@@ -1,8 +1,13 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { Category, Outfit, WardrobeItem } from '../types'
 import { CATEGORIES, CATEGORY_ICONS, CATEGORY_LABELS_PLURAL } from '../types'
 import { scoreOutfit, tier } from '../lib/suggest'
 import Avatar from './Avatar'
+
+const Avatar3D = lazy(() => import('./Avatar3D'))
+
+type ViewMode = '2d' | '3d'
+const VIEW_KEY = 'fitcheck-studio-view'
 
 export default function OutfitBuilder({
   items,
@@ -24,6 +29,13 @@ export default function OutfitBuilder({
   onGoWardrobe: () => void
 }) {
   const [outfitName, setOutfitName] = useState('')
+  const [view, setView] = useState<ViewMode>(() =>
+    localStorage.getItem(VIEW_KEY) === '3d' ? '3d' : '2d',
+  )
+
+  useEffect(() => {
+    localStorage.setItem(VIEW_KEY, view)
+  }, [view])
 
   const chosen = useMemo(
     () =>
@@ -67,7 +79,33 @@ export default function OutfitBuilder({
   return (
     <section className="studio">
       <div className="studio-left card">
-        <Avatar images={images} showHints />
+        <div className="view-toggle">
+          {(['2d', '3d'] as ViewMode[]).map(v => (
+            <button
+              key={v}
+              className={view === v ? 'seg active' : 'seg'}
+              onClick={() => setView(v)}
+            >
+              {v === '2d' ? '2-D' : '3-D'}
+            </button>
+          ))}
+        </div>
+        {view === '2d' ? (
+          <Avatar images={images} showHints />
+        ) : (
+          <>
+            <Suspense
+              fallback={
+                <div className="avatar3d-loading">
+                  <span className="spinner" /> Loading 3-D…
+                </div>
+              }
+            >
+              <Avatar3D images={images} />
+            </Suspense>
+            <p className="sub hint-3d">Drag to spin · scroll or pinch to zoom</p>
+          </>
+        )}
       </div>
 
       <div className="studio-right">
