@@ -8,6 +8,7 @@ import {
   WARMTH_LABELS,
 } from '../types'
 import { cap, extractColors } from '../lib/colors'
+import { eraseFaces } from '../lib/face'
 import { cropBlob, trimTransparent, type CropRect } from '../lib/image'
 import CropSelector from './CropSelector'
 
@@ -26,7 +27,11 @@ export default function UploadModal({
   const [originalUrl, setOriginalUrl] = useState<string | null>(null)
   /** The region being processed: the crop, or the whole photo. */
   const [base, setBase] = useState<Blob | null>(null)
-  const [processed, setProcessed] = useState<Blob | null>(null)
+  const [processedKeepFace, setProcessedKeepFace] = useState<Blob | null>(null)
+  const [processedNoFace, setProcessedNoFace] = useState<Blob | null>(null)
+  const [faces, setFaces] = useState(0)
+  const [faceOk, setFaceOk] = useState(true)
+  const [eraseFace, setEraseFace] = useState(true)
   const [useCutout, setUseCutout] = useState(true)
   const [status, setStatus] = useState<Status>('processing')
   const [progress, setProgress] = useState('')
@@ -39,7 +44,8 @@ export default function UploadModal({
   const [saving, setSaving] = useState(false)
   const jobRef = useRef(0)
 
-  const activeBlob = useCutout && processed ? processed : base
+  const cutout = eraseFace ? processedNoFace : processedKeepFace
+  const activeBlob = useCutout && cutout ? cutout : base
 
   useEffect(() => {
     if (!original) {
@@ -72,30 +78,33 @@ export default function UploadModal({
     }
   }, [activeBlob])
 
+  function clearProcessed() {
+    setBase(null)
+    setProcessedKeepFace(null)
+    setProcessedNoFace(null)
+    setFaces(0)
+    setFaceOk(true)
+    setPrimaryColor(null)
+  }
+
   function onFile(file: File | undefined | null) {
     if (!file || !file.type.startsWith('image/')) return
     jobRef.current++
     setOriginal(file)
-    setBase(null)
-    setProcessed(null)
-    setPrimaryColor(null)
+    clearProcessed()
     setStage('crop')
   }
 
   function backToCrop() {
     jobRef.current++
-    setBase(null)
-    setProcessed(null)
-    setPrimaryColor(null)
+    clearProcessed()
     setStage('crop')
   }
 
   function reset() {
     jobRef.current++
     setOriginal(null)
-    setBase(null)
-    setProcessed(null)
-    setPrimaryColor(null)
+    clearProcessed()
     setStage('pick')
   }
 
@@ -129,9 +138,19 @@ export default function UploadModal({
         },
       })
       if (jobRef.current !== job) return
-      const trimmed = await trimTransparent(out).catch(() => out)
+      setProgress('Checking for faces…')
+      const faceResult = await eraseFaces(out)
       if (jobRef.current !== job) return
-      setProcessed(trimmed)
+      const trimmedKeep = await trimTransparent(out).catch(() => out)
+      const trimmedNoFace =
+        faceResult.faces > 0
+          ? await trimTransparent(faceResult.blob).catch(() => faceResult.blob)
+          : trimmedKeep
+      if (jobRef.current !== job) return
+      setProcessedKeepFace(trimmedKeep)
+      setProcessedNoFace(trimmedNoFace)
+      setFaces(faceResult.faces)
+      setFaceOk(faceResult.ok)
       setStatus('cutout')
     } catch {
       if (jobRef.current !== job) return
@@ -207,14 +226,31 @@ export default function UploadModal({
                 </div>
               )}
               {status === 'cutout' && (
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={useCutout}
-                    onChange={e => setUseCutout(e.target.checked)}
-                  />
-                  Use background cutout
-                </label>
+                <>
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      checked={useCutout}
+                      onChange={e => setUseCutout(e.target.checked)}
+                    />
+                    Use background cutout
+                  </label>
+                  {faces > 0 && (
+                    <label className="check">
+                      <input
+                        type="checkbox"
+                        checked={eraseFace}
+                        onChange={e => setEraseFace(e.target.checked)}
+                      />
+                      Erase {faces === 1 ? 'the face' : `all ${faces} faces`} 🕶️
+                    </label>
+                  )}
+                  {!faceOk && (
+                    <div className="sub">
+                      Couldn't run the face check — eyeball the preview before saving.
+                    </div>
+                  )}
+                </>
               )}
               {status === 'original' && (
                 <div className="sub">Couldn't remove the background — using the photo as-is.</div>
