@@ -1,5 +1,8 @@
 import { useRef, useState } from 'react'
 import type { CropRect } from '../lib/image'
+import type { Category } from '../types'
+import { CATEGORIES, CATEGORY_ICONS, CATEGORY_LABELS } from '../types'
+import { cap } from '../lib/colors'
 
 type Mode = 'draw' | 'move' | 'nw' | 'ne' | 'sw' | 'se'
 
@@ -11,17 +14,21 @@ interface Point {
 const MIN_SIZE = 0.04
 
 /**
- * Lets the user drag a box over the photo to mark where the garment is.
- * Coordinates are fractions of the displayed image, so they map directly
- * onto the natural-resolution bitmap regardless of on-screen size.
+ * The "locate" step: pick what you're adding, optionally drag a box to
+ * narrow where to look, then extract. Box coordinates are fractions of the
+ * displayed image, so they map directly onto the natural-resolution bitmap.
  */
 export default function CropSelector({
   src,
+  category,
+  onCategoryChange,
   onConfirm,
   onBack,
 }: {
   src: string
-  onConfirm: (rect: CropRect | null) => void
+  category: Category
+  onCategoryChange: (c: Category) => void
+  onConfirm: (rect: CropRect | null, mode: 'smart' | 'bg') => void
   onBack: () => void
 }) {
   const stageRef = useRef<HTMLDivElement>(null)
@@ -85,9 +92,20 @@ export default function CropSelector({
 
   return (
     <div className="crop-wrap">
+      <div className="chip-row crop-cats">
+        {CATEGORIES.map(c => (
+          <button
+            key={c}
+            className={category === c ? 'chip active' : 'chip'}
+            onClick={() => onCategoryChange(c)}
+          >
+            {CATEGORY_ICONS[c]} {cap(CATEGORY_LABELS[c])}
+          </button>
+        ))}
+      </div>
       <p className="sub crop-copy">
-        Drag a box around the piece you're adding — the cutout will only look there. Wearing a
-        full outfit? Add it once per piece, boxing a different garment each time.
+        The garment AI finds the {CATEGORY_LABELS[category]} on its own — no need to trace
+        anything. Optionally drag a box to narrow where it looks (e.g. two shirts in the shot).
       </p>
       <div
         ref={stageRef}
@@ -128,17 +146,19 @@ export default function CropSelector({
             </div>
           </>
         )}
-        {!rect && <div className="crop-hint">Drag to mark the garment</div>}
       </div>
       <div className="crop-actions">
         <button className="btn ghost small" onClick={onBack}>
           Different photo
         </button>
-        <button className="btn ghost small" onClick={() => onConfirm(null)}>
-          Use whole photo
+        <button
+          className="btn ghost small"
+          onClick={() => onConfirm(usable ? rect : null, 'bg')}
+        >
+          Just remove background
         </button>
-        <button className="btn primary" disabled={!usable} onClick={() => rect && onConfirm(rect)}>
-          Cut out this area
+        <button className="btn primary" onClick={() => onConfirm(usable ? rect : null, 'smart')}>
+          ✨ Find the {CATEGORY_LABELS[category]}
         </button>
       </div>
     </div>

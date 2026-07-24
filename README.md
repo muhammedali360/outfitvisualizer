@@ -7,13 +7,16 @@ from your own closet.
 ## Features
 
 - **Wardrobe** — upload photos of garments (hat / top / bottoms / shoes).
-  After picking a photo you drag a box over the garment so the cutout only
-  looks there — a full-outfit photo can be added once per piece. The
-  background is then removed in the browser (via `@imgly/background-removal`,
-  no server involved), any detected face is automatically erased from the
-  cutout (MediaPipe face detection, also on-device — untick to keep it),
-  transparent margins are auto-trimmed so pieces fill their mannequin slots,
-  and dominant colors are detected and named.
+  A clothes-parsing model (SegFormer via Transformers.js, in-browser) labels
+  every pixel — Upper-clothes, Pants, Dress, Hat, shoes, plus Face/Hair/skin
+  as separate classes — so picking "top" extracts exactly the top's pixels
+  with skin and face excluded by construction. A full-outfit photo can be
+  added once per piece; the parse is cached, so switching category re-cuts
+  instantly. An optional drag-box narrows where to look, and when no distinct
+  garment is found (e.g. unusual pieces) it falls back to whole-region
+  background removal (`@imgly/background-removal`) with automatic on-device
+  face erasure (MediaPipe). Transparent margins are auto-trimmed so pieces
+  fill their mannequin slots, and dominant colors are detected and named.
 - **Outfit Studio** — dress a mannequin by tapping pieces into slots, get a
   live 0–100 score for the combination (color harmony + formality cohesion)
   with plain-English reasons, and save outfits you like. Toggle between the
