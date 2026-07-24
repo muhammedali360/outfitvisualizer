@@ -81,8 +81,9 @@ export default function Wardrobe({
           <div className="empty-emoji">🧥</div>
           <h2>Nothing in the closet yet</h2>
           <p>
-            Upload a photo of a garment — laid flat on the bed works great. Fit Check cuts out the
-            background, reads its colors, and files it in your virtual closet.
+            Upload a photo — wearing the outfit or with the piece laid flat. You mark where the
+            garment is, and Fit Check cuts it out, reads its colors, and files it in your virtual
+            closet.
           </p>
           <button className="btn primary" onClick={() => setAdding(true)}>
             Upload your first piece

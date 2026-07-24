@@ -8,8 +8,11 @@ import {
   WARMTH_LABELS,
 } from '../types'
 import { cap, extractColors } from '../lib/colors'
+import { cropBlob, trimTransparent, type CropRect } from '../lib/image'
+import CropSelector from './CropSelector'
 
-type Status = 'empty' | 'processing' | 'cutout' | 'original'
+type Stage = 'pick' | 'crop' | 'edit'
+type Status = 'processing' | 'cutout' | 'original'
 
 export default function UploadModal({
   onSave,
@@ -18,10 +21,14 @@ export default function UploadModal({
   onSave: (item: WardrobeItem) => void | Promise<void>
   onClose: () => void
 }) {
+  const [stage, setStage] = useState<Stage>('pick')
   const [original, setOriginal] = useState<Blob | null>(null)
+  const [originalUrl, setOriginalUrl] = useState<string | null>(null)
+  /** The region being processed: the crop, or the whole photo. */
+  const [base, setBase] = useState<Blob | null>(null)
   const [processed, setProcessed] = useState<Blob | null>(null)
   const [useCutout, setUseCutout] = useState(true)
-  const [status, setStatus] = useState<Status>('empty')
+  const [status, setStatus] = useState<Status>('processing')
   const [progress, setProgress] = useState('')
   const [category, setCategory] = useState<Category>('top')
   const [name, setName] = useState('')
@@ -32,7 +39,17 @@ export default function UploadModal({
   const [saving, setSaving] = useState(false)
   const jobRef = useRef(0)
 
-  const activeBlob = useCutout && processed ? processed : original
+  const activeBlob = useCutout && processed ? processed : base
+
+  useEffect(() => {
+    if (!original) {
+      setOriginalUrl(null)
+      return
+    }
+    const url = URL.createObjectURL(original)
+    setOriginalUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [original])
 
   useEffect(() => {
     if (!activeBlob) {
@@ -55,16 +72,52 @@ export default function UploadModal({
     }
   }, [activeBlob])
 
-  async function onFile(file: File | undefined | null) {
+  function onFile(file: File | undefined | null) {
     if (!file || !file.type.startsWith('image/')) return
-    const job = ++jobRef.current
+    jobRef.current++
     setOriginal(file)
+    setBase(null)
     setProcessed(null)
+    setPrimaryColor(null)
+    setStage('crop')
+  }
+
+  function backToCrop() {
+    jobRef.current++
+    setBase(null)
+    setProcessed(null)
+    setPrimaryColor(null)
+    setStage('crop')
+  }
+
+  function reset() {
+    jobRef.current++
+    setOriginal(null)
+    setBase(null)
+    setProcessed(null)
+    setPrimaryColor(null)
+    setStage('pick')
+  }
+
+  async function confirmCrop(rect: CropRect | null) {
+    if (!original) return
+    const job = ++jobRef.current
+    setStage('edit')
     setStatus('processing')
-    setProgress('Warming up…')
+    setProgress('Preparing…')
+    let source = original
+    if (rect) {
+      try {
+        source = await cropBlob(original, rect)
+      } catch {
+        source = original
+      }
+    }
+    if (jobRef.current !== job) return
+    setBase(source)
     try {
       const { removeBackground } = await import('@imgly/background-removal')
-      const out = await removeBackground(file, {
+      const out = await removeBackground(source, {
         progress: (key, current, total) => {
           if (jobRef.current !== job) return
           if (key.startsWith('fetch')) {
@@ -76,20 +129,14 @@ export default function UploadModal({
         },
       })
       if (jobRef.current !== job) return
-      setProcessed(out)
+      const trimmed = await trimTransparent(out).catch(() => out)
+      if (jobRef.current !== job) return
+      setProcessed(trimmed)
       setStatus('cutout')
     } catch {
       if (jobRef.current !== job) return
       setStatus('original')
     }
-  }
-
-  function reset() {
-    jobRef.current++
-    setOriginal(null)
-    setProcessed(null)
-    setStatus('empty')
-    setPrimaryColor(null)
   }
 
   async function save() {
@@ -120,13 +167,13 @@ export default function UploadModal({
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <h2>Add a piece</h2>
+          <h2>{stage === 'crop' ? 'Where should we look?' : 'Add a piece'}</h2>
           <button className="icon-btn" onClick={onClose} title="Close">
             ✕
           </button>
         </div>
 
-        {!original ? (
+        {stage === 'pick' && (
           <label
             className="dropzone"
             onDragOver={e => e.preventDefault()}
@@ -138,12 +185,22 @@ export default function UploadModal({
             <input type="file" accept="image/*" hidden onChange={e => onFile(e.target.files?.[0])} />
             <div className="empty-emoji">📸</div>
             <strong>Drop a photo here, or click to browse</strong>
-            <span className="sub">One garment per photo works best — laid flat or on a hanger.</span>
+            <span className="sub">
+              Wearing the piece or laid flat — you'll mark where to look next.
+            </span>
           </label>
-        ) : (
+        )}
+
+        {stage === 'crop' && originalUrl && (
+          <CropSelector src={originalUrl} onConfirm={confirmCrop} onBack={reset} />
+        )}
+
+        {stage === 'edit' && (
           <div className="upload-body">
             <div className="upload-preview">
-              <div className="preview-frame">{previewUrl && <img src={previewUrl} alt="Garment preview" />}</div>
+              <div className="preview-frame">
+                {previewUrl && <img src={previewUrl} alt="Garment preview" />}
+              </div>
               {status === 'processing' && (
                 <div className="processing-note">
                   <span className="spinner" /> {progress}
@@ -160,11 +217,16 @@ export default function UploadModal({
                 </label>
               )}
               {status === 'original' && (
-                <div className="sub">Couldn't remove the background — using the original photo.</div>
+                <div className="sub">Couldn't remove the background — using the photo as-is.</div>
               )}
-              <button className="btn ghost small" onClick={reset}>
-                Choose a different photo
-              </button>
+              <div className="chip-row">
+                <button className="btn ghost small" onClick={backToCrop}>
+                  Pick a different area
+                </button>
+                <button className="btn ghost small" onClick={reset}>
+                  Different photo
+                </button>
+              </div>
             </div>
 
             <div className="upload-form">

@@ -6,10 +6,12 @@ from your own closet.
 
 ## Features
 
-- **Wardrobe** — upload photos of garments (hat / top / bottoms / shoes). The
-  background is removed automatically in the browser (via
-  `@imgly/background-removal`, no server involved) and the garment's dominant
-  colors are detected and named.
+- **Wardrobe** — upload photos of garments (hat / top / bottoms / shoes).
+  After picking a photo you drag a box over the garment so the cutout only
+  looks there — a full-outfit photo can be added once per piece. The
+  background is then removed in the browser (via `@imgly/background-removal`,
+  no server involved), transparent margins are auto-trimmed so pieces fill
+  their mannequin slots, and dominant colors are detected and named.
 - **Outfit Studio** — dress an SVG mannequin by tapping pieces into slots, get
   a live 0–100 score for the combination (color harmony + formality cohesion)
   with plain-English reasons, and save outfits you like.
