@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Category, Outfit, WardrobeItem } from './types'
 import { CATEGORIES } from './types'
 import * as db from './db'
+import { exportBackup, importBackup } from './lib/backup'
 import { fetchWeather } from './lib/weather'
 import Wardrobe from './components/Wardrobe'
 import OutfitBuilder from './components/OutfitBuilder'
@@ -23,17 +24,19 @@ export default function App() {
   const [selection, setSelection] = useState<Partial<Record<Category, string>>>({})
   const [weather, setWeather] = useState<WeatherState>('loading')
 
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([db.getAllItems(), db.getAllOutfits()]).then(([its, ofs]) => {
-      if (cancelled) return
-      setItems(its.sort((a, b) => a.createdAt - b.createdAt))
-      setOutfits(ofs.sort((a, b) => a.createdAt - b.createdAt))
-      setUrls(Object.fromEntries(its.map(i => [i.id, URL.createObjectURL(i.image)])))
+  async function loadAll() {
+    const [its, ofs] = await Promise.all([db.getAllItems(), db.getAllOutfits()])
+    setItems(its.sort((a, b) => a.createdAt - b.createdAt))
+    setOutfits(ofs.sort((a, b) => a.createdAt - b.createdAt))
+    setUrls(prev => {
+      for (const url of Object.values(prev)) URL.revokeObjectURL(url)
+      return Object.fromEntries(its.map(i => [i.id, URL.createObjectURL(i.image)]))
     })
-    return () => {
-      cancelled = true
-    }
+  }
+
+  useEffect(() => {
+    loadAll()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Ask for weather (and the geolocation permission it needs) only once the
@@ -86,6 +89,12 @@ export default function App() {
     setTab('studio')
   }
 
+  async function handleImport(file: File) {
+    const restored = await importBackup(file)
+    await loadAll()
+    return restored
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -103,7 +112,14 @@ export default function App() {
       </header>
       <main>
         {tab === 'wardrobe' && (
-          <Wardrobe items={items} urls={urls} onAdd={addItem} onDelete={removeItem} />
+          <Wardrobe
+            items={items}
+            urls={urls}
+            onAdd={addItem}
+            onDelete={removeItem}
+            onExport={() => exportBackup(items, outfits)}
+            onImport={handleImport}
+          />
         )}
         {tab === 'studio' && (
           <OutfitBuilder

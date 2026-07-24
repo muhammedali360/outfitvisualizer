@@ -230,6 +230,30 @@ main {
   color: var(--muted);
 }
 
+.head-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+label.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.notice {
+  font-size: 0.85rem;
+  color: var(--good);
+  margin: -8px 0 16px;
+}
+
+.notice.error {
+  color: var(--bad);
+}
+
 .empty-hero {
   text-align: center;
   padding: 64px 24px;

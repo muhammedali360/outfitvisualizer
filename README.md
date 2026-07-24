@@ -21,6 +21,11 @@ from your own closet.
 All data (images included) is stored locally in IndexedDB — nothing leaves your
 machine except the anonymous weather request.
 
+- **Backup / portability** — "Export backup" in the wardrobe downloads the
+  whole closet (garment images, tags, saved outfits) as one JSON file;
+  "Import backup" restores it on any device, browser, or domain. Imports merge
+  by id, so restoring the same file twice is harmless.
+
 ## Run it
 
 ```sh

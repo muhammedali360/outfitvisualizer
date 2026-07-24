@@ -8,13 +8,39 @@ export default function Wardrobe({
   urls,
   onAdd,
   onDelete,
+  onExport,
+  onImport,
 }: {
   items: WardrobeItem[]
   urls: Record<string, string>
   onAdd: (item: WardrobeItem) => Promise<void>
   onDelete: (id: string) => void
+  onExport: () => void | Promise<void>
+  onImport: (file: File) => Promise<{ items: number; outfits: number }>
 }) {
   const [adding, setAdding] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null)
+
+  async function handleImportFile(file: File | undefined | null) {
+    if (!file || importing) return
+    setImporting(true)
+    setNotice(null)
+    try {
+      const restored = await onImport(file)
+      setNotice({
+        text: `Restored ${restored.items} piece${restored.items === 1 ? '' : 's'} and ${restored.outfits} outfit${restored.outfits === 1 ? '' : 's'}.`,
+        ok: true,
+      })
+    } catch (err) {
+      setNotice({
+        text: err instanceof Error ? err.message : 'Import failed.',
+        ok: false,
+      })
+    } finally {
+      setImporting(false)
+    }
+  }
 
   return (
     <section>
@@ -23,10 +49,32 @@ export default function Wardrobe({
           <h1>Your wardrobe</h1>
           <p className="sub">Snap your clothes, cut them out, build fits.</p>
         </div>
-        <button className="btn primary" onClick={() => setAdding(true)}>
-          + Add a piece
-        </button>
+        <div className="head-actions">
+          <label className="btn ghost small">
+            {importing ? 'Importing…' : 'Import backup'}
+            <input
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={e => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                handleImportFile(file)
+              }}
+            />
+          </label>
+          {items.length > 0 && (
+            <button className="btn ghost small" onClick={onExport}>
+              Export backup
+            </button>
+          )}
+          <button className="btn primary" onClick={() => setAdding(true)}>
+            + Add a piece
+          </button>
+        </div>
       </div>
+
+      {notice && <p className={notice.ok ? 'notice' : 'notice error'}>{notice.text}</p>}
 
       {items.length === 0 && (
         <div className="empty-hero">
