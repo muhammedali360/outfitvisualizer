@@ -7,6 +7,6 @@ export default defineConfig({
   base: './',
   plugins: [react()],
   optimizeDeps: {
-    exclude: ['@imgly/background-removal'],
+    exclude: ['@imgly/background-removal', '@huggingface/transformers'],
   },
 })

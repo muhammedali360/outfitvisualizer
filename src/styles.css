@@ -419,6 +419,14 @@ label.btn {
   line-height: 1.5;
 }
 
+.crop-cats {
+  justify-content: center;
+}
+
+.good-note {
+  color: var(--good);
+}
+
 .crop-stage {
   position: relative;
   align-self: center;

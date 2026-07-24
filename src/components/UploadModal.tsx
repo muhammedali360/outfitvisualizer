@@ -9,11 +9,13 @@ import {
 } from '../types'
 import { cap, extractColors } from '../lib/colors'
 import { eraseFaces } from '../lib/face'
+import { composeGarment, segmentClothes, type ClothesSegmentation } from '../lib/garment'
 import { cropBlob, trimTransparent, type CropRect } from '../lib/image'
 import CropSelector from './CropSelector'
 
 type Stage = 'pick' | 'crop' | 'edit'
 type Status = 'processing' | 'cutout' | 'original'
+type Method = 'smart' | 'bg' | null
 
 export default function UploadModal({
   onSave,
@@ -33,6 +35,8 @@ export default function UploadModal({
   const [faceOk, setFaceOk] = useState(true)
   const [eraseFace, setEraseFace] = useState(true)
   const [useCutout, setUseCutout] = useState(true)
+  const [method, setMethod] = useState<Method>(null)
+  const [smartMissed, setSmartMissed] = useState(false)
   const [status, setStatus] = useState<Status>('processing')
   const [progress, setProgress] = useState('')
   const [category, setCategory] = useState<Category>('top')
@@ -43,6 +47,9 @@ export default function UploadModal({
   const [formality, setFormality] = useState<Formality>(1)
   const [saving, setSaving] = useState(false)
   const jobRef = useRef(0)
+  const segCacheRef = useRef<{ source: Blob; seg: ClothesSegmentation } | null>(null)
+  const composedCatRef = useRef<Category | null>(null)
+  const lastModeRef = useRef<'smart' | 'bg' | null>(null)
 
   const cutout = eraseFace ? processedNoFace : processedKeepFace
   const activeBlob = useCutout && cutout ? cutout : base
@@ -78,13 +85,31 @@ export default function UploadModal({
     }
   }, [activeBlob])
 
+  // Switching category after a smart extraction re-cuts the new garment from
+  // the cached parse — no re-download, no re-inference.
+  useEffect(() => {
+    if (stage !== 'edit' || lastModeRef.current !== 'smart') return
+    const cache = segCacheRef.current
+    if (!cache || composedCatRef.current === category) return
+    const job = ++jobRef.current
+    setStatus('processing')
+    setProgress(`Switching to the ${CATEGORY_LABELS[category]}…`)
+    void smartPath(cache.source, category, job)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category, stage])
+
   function clearProcessed() {
     setBase(null)
     setProcessedKeepFace(null)
     setProcessedNoFace(null)
     setFaces(0)
     setFaceOk(true)
+    setMethod(null)
+    setSmartMissed(false)
     setPrimaryColor(null)
+    segCacheRef.current = null
+    composedCatRef.current = null
+    lastModeRef.current = null
   }
 
   function onFile(file: File | undefined | null) {
@@ -108,9 +133,13 @@ export default function UploadModal({
     setStage('pick')
   }
 
-  async function confirmCrop(rect: CropRect | null) {
+  async function process(rect: CropRect | null, mode: 'smart' | 'bg') {
     if (!original) return
     const job = ++jobRef.current
+    lastModeRef.current = mode
+    segCacheRef.current = null
+    composedCatRef.current = null
+    setSmartMissed(false)
     setStage('edit')
     setStatus('processing')
     setProgress('Preparing…')
@@ -124,6 +153,49 @@ export default function UploadModal({
     }
     if (jobRef.current !== job) return
     setBase(source)
+    if (mode === 'smart') await smartPath(source, category, job)
+    else await bgRemovePath(source, job)
+  }
+
+  async function smartPath(source: Blob, cat: Category, job: number) {
+    composedCatRef.current = cat
+    try {
+      setProgress(`Looking for the ${CATEGORY_LABELS[cat]}…`)
+      let seg: ClothesSegmentation
+      if (segCacheRef.current?.source === source) {
+        seg = segCacheRef.current.seg
+      } else {
+        seg = await segmentClothes(source, msg => {
+          if (jobRef.current === job) setProgress(msg)
+        })
+        if (jobRef.current !== job) return
+        segCacheRef.current = { source, seg }
+      }
+      const res = await composeGarment(source, seg, cat)
+      if (jobRef.current !== job) return
+      if (res) {
+        const trimmed = await trimTransparent(res.blob).catch(() => res.blob)
+        if (jobRef.current !== job) return
+        setProcessedKeepFace(trimmed)
+        setProcessedNoFace(trimmed)
+        setFaces(0)
+        setFaceOk(true)
+        setMethod('smart')
+        setStatus('cutout')
+        return
+      }
+    } catch {
+      if (jobRef.current !== job) return
+    }
+    // The parser couldn't find that garment (flat-lay shots, unusual pieces):
+    // degrade to plain background removal.
+    if (jobRef.current !== job) return
+    setSmartMissed(true)
+    setProgress('Falling back to background removal…')
+    await bgRemovePath(source, job)
+  }
+
+  async function bgRemovePath(source: Blob, job: number) {
     try {
       const { removeBackground } = await import('@imgly/background-removal')
       const out = await removeBackground(source, {
@@ -151,6 +223,7 @@ export default function UploadModal({
       setProcessedNoFace(trimmedNoFace)
       setFaces(faceResult.faces)
       setFaceOk(faceResult.ok)
+      setMethod('bg')
       setStatus('cutout')
     } catch {
       if (jobRef.current !== job) return
@@ -186,7 +259,7 @@ export default function UploadModal({
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <h2>{stage === 'crop' ? 'Where should we look?' : 'Add a piece'}</h2>
+          <h2>{stage === 'crop' ? 'What are we adding?' : 'Add a piece'}</h2>
           <button className="icon-btn" onClick={onClose} title="Close">
             ✕
           </button>
@@ -205,13 +278,19 @@ export default function UploadModal({
             <div className="empty-emoji">📸</div>
             <strong>Drop a photo here, or click to browse</strong>
             <span className="sub">
-              Wearing the piece or laid flat — you'll mark where to look next.
+              Wearing the outfit or laid flat — the garment AI picks out each piece.
             </span>
           </label>
         )}
 
         {stage === 'crop' && originalUrl && (
-          <CropSelector src={originalUrl} onConfirm={confirmCrop} onBack={reset} />
+          <CropSelector
+            src={originalUrl}
+            category={category}
+            onCategoryChange={setCategory}
+            onConfirm={(rect, mode) => void process(rect, mode)}
+            onBack={reset}
+          />
         )}
 
         {stage === 'edit' && (
@@ -227,15 +306,27 @@ export default function UploadModal({
               )}
               {status === 'cutout' && (
                 <>
+                  {method === 'smart' && (
+                    <div className="sub good-note">
+                      ✂️ Grabbed just the {CATEGORY_LABELS[category]} — skin, face and everything
+                      else left out.
+                    </div>
+                  )}
+                  {method === 'bg' && smartMissed && (
+                    <div className="sub">
+                      Couldn't isolate a distinct {CATEGORY_LABELS[category]} — removed the
+                      background instead.
+                    </div>
+                  )}
                   <label className="check">
                     <input
                       type="checkbox"
                       checked={useCutout}
                       onChange={e => setUseCutout(e.target.checked)}
                     />
-                    Use background cutout
+                    Use cutout
                   </label>
-                  {faces > 0 && (
+                  {method === 'bg' && faces > 0 && (
                     <label className="check">
                       <input
                         type="checkbox"
@@ -245,7 +336,7 @@ export default function UploadModal({
                       Erase {faces === 1 ? 'the face' : `all ${faces} faces`} 🕶️
                     </label>
                   )}
-                  {!faceOk && (
+                  {method === 'bg' && !faceOk && (
                     <div className="sub">
                       Couldn't run the face check — eyeball the preview before saving.
                     </div>
@@ -253,7 +344,7 @@ export default function UploadModal({
                 </>
               )}
               {status === 'original' && (
-                <div className="sub">Couldn't remove the background — using the photo as-is.</div>
+                <div className="sub">Couldn't process the image — using the photo as-is.</div>
               )}
               <div className="chip-row">
                 <button className="btn ghost small" onClick={backToCrop}>
