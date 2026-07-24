@@ -14,9 +14,12 @@ from your own closet.
   cutout (MediaPipe face detection, also on-device — untick to keep it),
   transparent margins are auto-trimmed so pieces fill their mannequin slots,
   and dominant colors are detected and named.
-- **Outfit Studio** — dress an SVG mannequin by tapping pieces into slots, get
-  a live 0–100 score for the combination (color harmony + formality cohesion)
-  with plain-English reasons, and save outfits you like.
+- **Outfit Studio** — dress a mannequin by tapping pieces into slots, get a
+  live 0–100 score for the combination (color harmony + formality cohesion)
+  with plain-English reasons, and save outfits you like. Toggle between the
+  flat 2-D view and a rotatable 3-D mannequin (three.js) where your cutouts
+  are wrapped onto curved shells around the body — drag to spin, scroll to
+  zoom.
 - **Stylist** — "what should I wear today?" Fetches your local forecast from
   Open-Meteo (free, no API key; asks for location permission), filters by how
   the day feels and the occasion (casual / work / dressy), and ranks the best
