@@ -15,11 +15,17 @@ from your own closet.
   instantly. An optional drag-box narrows where to look, and when no distinct
   garment is found (e.g. unusual pieces) it falls back to whole-region
   background removal (`@imgly/background-removal`) with automatic on-device
-  face erasure (MediaPipe). Extracted garments are then **normalized**: body
-  pose (MediaPipe, on-device) measures the shoulder/hip/ear tilt and the
-  garment is rotated upright (capped at ±35°), trimmed, and centered on a
-  standard per-category frame so every piece presents uniformly regardless
-  of the photo's pose or angle. Dominant colors are detected and named.
+  face erasure (MediaPipe). Extracted garments are then **normalized** so every
+  piece presents uniformly regardless of the photo. Straightening measures the
+  shoulder/hip/ear tilt from body pose (MediaPipe, on-device) and falls back to
+  the garment's own axis of mirror symmetry, so flat-lays and hanger shots —
+  which have no body to read — get straightened too (both capped at ±35°).
+  Placement then anchors tops by their shoulder line and bottoms by their
+  waistband, scaled so the torso and hips are always the same width; sizing by
+  anatomy rather than by bounding box is what stops a cropped tee from
+  presenting at the same size as a long coat. Every piece lands on a fixed
+  per-category frame matched to the mannequin slots. Dominant colors are
+  detected and named.
 - **Outfit Studio** — dress a mannequin by tapping pieces into slots, get a
   live 0–100 score for the combination (color harmony + formality cohesion)
   with plain-English reasons, and save outfits you like. Toggle between the
@@ -47,6 +53,12 @@ npm run dev      # http://localhost:5173
 ```
 
 `npm run build` type-checks and produces a production build in `dist/`.
+
+`npm run normcheck` runs the garment-normalization geometry check: synthetic
+tees and pants at assorted rotations, scales and lengths go through the real
+pipeline, and the results are measured off their pixels. It also writes
+`dev/contact-sheet.png`, which is the quickest way to see the effect of
+retuning the canonical frames in `src/lib/normalize.ts`.
 
 ## Notes
 
