@@ -1,7 +1,8 @@
-import type { Outfit, WardrobeItem } from './types'
+import type { DayPlan, Outfit, WardrobeItem } from './types'
 
 const DB_NAME = 'fit-check'
-const DB_VERSION = 1
+// v2 added the `days` store (calendar plans + wear log).
+const DB_VERSION = 2
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -13,6 +14,9 @@ function openDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('outfits')) {
         db.createObjectStore('outfits', { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains('days')) {
+        db.createObjectStore('days', { keyPath: 'date' })
       }
     }
     req.onsuccess = () => resolve(req.result)
@@ -55,3 +59,11 @@ export const putOutfit = (outfit: Outfit) =>
 
 export const deleteOutfit = (id: string) =>
   run('outfits', 'readwrite', s => s.delete(id)).then(() => undefined)
+
+export const getAllDays = () => run('days', 'readonly', s => s.getAll() as IDBRequest<DayPlan[]>)
+
+export const putDay = (day: DayPlan) =>
+  run('days', 'readwrite', s => s.put(day)).then(() => undefined)
+
+export const deleteDay = (date: string) =>
+  run('days', 'readwrite', s => s.delete(date)).then(() => undefined)

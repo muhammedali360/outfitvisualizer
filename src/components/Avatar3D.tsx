@@ -21,6 +21,8 @@ interface ShellSpec {
 const SHELLS: Record<Category, ShellSpec> = {
   hat: { radius: 0.36, arc: Math.PI * 1.15, anchor: 'bottom', anchorY: 3.0, minH: 0.28, maxH: 0.8 },
   top: { radius: 0.72, arc: Math.PI * 1.1, anchor: 'top', anchorY: 2.78, minH: 0.9, maxH: 1.6 },
+  // A wider radius than the top so the layer genuinely wraps outside it.
+  layer: { radius: 0.82, arc: Math.PI * 1.16, anchor: 'top', anchorY: 2.84, minH: 1.0, maxH: 1.8 },
   bottom: { radius: 0.52, arc: Math.PI * 1.1, anchor: 'top', anchorY: 1.85, minH: 1.0, maxH: 1.75 },
   shoes: { radius: 0.46, arc: Math.PI, anchor: 'bottom', anchorY: 0.02, minH: 0.25, maxH: 0.55 },
 }

@@ -25,6 +25,7 @@ import { garmentAnchors, maskFromBlob, symmetryTilt } from './silhouette'
 const FRAME_ASPECT: Record<Category, number> = {
   hat: 114 / 74,
   top: 208 / 218,
+  layer: 240 / 244,
   bottom: 164 / 238,
   shoes: 184 / 92,
 }
@@ -46,6 +47,10 @@ const PAD = 0.04
  */
 const CANON: Partial<Record<Category, { y: number; width: number }>> = {
   top: { y: 0.15, width: 0.5 },
+  // A jacket is parsed as 'Upper-clothes' exactly like a top, so it gets the
+  // same treatment; the mannequin's wider layer slot is what makes it read as
+  // the outer piece.
+  layer: { y: 0.15, width: 0.5 },
   bottom: { y: 0.07, width: 0.52 },
 }
 

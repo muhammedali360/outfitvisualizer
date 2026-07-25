@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { Category, Formality, Warmth, WardrobeItem } from '../types'
-import { bestOutfits, targetWarmthForTemp, tier } from '../lib/suggest'
+import { availableItems, bestOutfits, hasCoreWardrobe, targetWarmthForTemp, tier } from '../lib/suggest'
 import type { Weather } from '../lib/weather'
 
 export type WeatherState = Weather | 'loading' | 'error'
@@ -37,9 +37,9 @@ export default function Suggestions({
     [items, targetWarmth, occasion],
   )
 
-  const haveCore = (['top', 'bottom', 'shoes'] as Category[]).every(c =>
-    items.some(i => i.category === c),
-  )
+  const wearable = useMemo(() => availableItems(items), [items])
+  const haveCore = hasCoreWardrobe(wearable)
+  const inLaundry = items.length - wearable.length
 
   return (
     <section>
@@ -65,6 +65,11 @@ export default function Suggestions({
         </div>
         {live && live.precipProb >= 50 && (
           <p className="sub">☔ {live.precipProb}% chance of rain — a hat wouldn't hurt.</p>
+        )}
+        {inLaundry > 0 && (
+          <p className="sub">
+            🧺 Skipping {inLaundry} piece{inLaundry === 1 ? '' : 's'} in the laundry.
+          </p>
         )}
         <div className="filters">
           <div className="chip-row">

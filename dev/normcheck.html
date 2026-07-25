@@ -108,6 +108,8 @@
         ['tee worn (sleeves down)','top', 'tee', 300, 1.4, 0,   [900, 900], true],
         ['tunic (long top)',       'top', 'tee', 300, 1.7, 0,   [900, 1000], true],
         ['long coat',              'top', 'tee', 300, 2.3, 0,   [900, 1200], true],
+        ['jacket (layer)',       'layer', 'tee', 300, 1.5, 0,   [900, 1000], true],
+        ['jacket (layer) +16°',  'layer', 'tee', 300, 1.5, 16,  [1100, 1100], true],
         ['pants upright',       'bottom', 'pants', 300, 2.6, 0,  [900, 1100], false],
         ['pants +18°',          'bottom', 'pants', 300, 2.6, 18, [1100, 1100], false],
         ['pants small',         'bottom', 'pants', 160, 2.6, 0,  [600, 700], false],
@@ -138,7 +140,7 @@
       }
 
       // --- invariants across presentations of the same garment ---
-      const band = c => (c === 'top' ? [0.55, 0.75] : [0.12, 0.24])
+      const band = c => (c === 'bottom' ? [0.12, 0.24] : [0.55, 0.75])
       const bw = n => bodyWidth(measured[n].m, ...band(measured[n].cat))
       const hangY = n => measured[n].m.top
       const cx = n => (measured[n].m.minX + measured[n].m.maxX) / 2
@@ -182,6 +184,14 @@
         `${Math.round(((coat.bottom - coat.top) / coat.h) * 100)}% of frame height`)
       check('shorts hip width matches pants', near(bw('shorts'), pbase, pbase * 0.12),
         `${bw('shorts')} vs ${pbase}`)
+
+      // Outerwear is its own category with its own (wider) frame, so it can't be
+      // compared against the tees — but it has to be self-consistent.
+      check('rotated jacket matches upright', near(bw('jacket (layer) +16°'), bw('jacket (layer)'),
+        bw('jacket (layer)') * 0.06), `${bw('jacket (layer) +16°')} vs ${bw('jacket (layer)')}`)
+      check('rotated jacket hang line matches upright',
+        near(hangY('jacket (layer) +16°'), hangY('jacket (layer)'), 28),
+        `top ${hangY('jacket (layer) +16°')} vs ${hangY('jacket (layer)')}`)
 
       document.getElementById('out').textContent =
         results.join('\n') + `\n\n${fail.length ? 'FAILURES: ' + fail.length : 'ALL PASS'}`

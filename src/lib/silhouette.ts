@@ -57,7 +57,7 @@ const MIN_SYMMETRY = 0.55
 const MIN_GAIN = 0.02
 
 /** Garments whose silhouette has a meaningful vertical axis of symmetry. */
-const SYMMETRIC: Category[] = ['hat', 'top', 'bottom']
+const SYMMETRIC: Category[] = ['hat', 'top', 'layer', 'bottom']
 
 interface Points {
   xs: Float32Array
@@ -197,6 +197,7 @@ interface AnchorSpec {
 
 const ANCHORS: Partial<Record<Category, AnchorSpec>> = {
   top: { lineDepth: 0.05, widthBand: [0.55, 0.75] },
+  layer: { lineDepth: 0.05, widthBand: [0.55, 0.75] },
   bottom: { lineDepth: 0.03, widthBand: [0.12, 0.24] },
 }
 
