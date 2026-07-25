@@ -54,11 +54,16 @@ export async function eraseFaces(blob: Blob): Promise<FaceEraseResult> {
     ctx.globalCompositeOperation = 'destination-out'
     ctx.fillStyle = '#000'
     for (const b of boxes) {
+      // Erase the whole head, not just a face oval: clear a widened column
+      // from the top of the image down to the chin, finished with an ellipse
+      // so the cut bottom is rounded instead of a hard shelf. This takes
+      // hair with it and avoids the "blob hole" look.
       const cx = b.originX + b.width / 2
-      // Shift up slightly and over-cover so forehead and jawline go with it.
-      const cy = b.originY + b.height / 2 - b.height * 0.05
+      const chinY = b.originY + b.height * 1.02
+      const halfW = b.width * 1.35
+      ctx.fillRect(cx - halfW, 0, halfW * 2, Math.max(0, chinY))
       ctx.beginPath()
-      ctx.ellipse(cx, cy, b.width * 0.72, b.height * 0.82, 0, 0, Math.PI * 2)
+      ctx.ellipse(cx, chinY, halfW, b.height * 0.35, 0, 0, Math.PI * 2)
       ctx.fill()
     }
     const out = await new Promise<Blob>((resolve, reject) =>
