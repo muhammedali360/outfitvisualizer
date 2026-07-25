@@ -15,8 +15,11 @@ from your own closet.
   instantly. An optional drag-box narrows where to look, and when no distinct
   garment is found (e.g. unusual pieces) it falls back to whole-region
   background removal (`@imgly/background-removal`) with automatic on-device
-  face erasure (MediaPipe). Transparent margins are auto-trimmed so pieces
-  fill their mannequin slots, and dominant colors are detected and named.
+  face erasure (MediaPipe). Extracted garments are then **normalized**: body
+  pose (MediaPipe, on-device) measures the shoulder/hip/ear tilt and the
+  garment is rotated upright (capped at ±35°), trimmed, and centered on a
+  standard per-category frame so every piece presents uniformly regardless
+  of the photo's pose or angle. Dominant colors are detected and named.
 - **Outfit Studio** — dress a mannequin by tapping pieces into slots, get a
   live 0–100 score for the combination (color harmony + formality cohesion)
   with plain-English reasons, and save outfits you like. Toggle between the
