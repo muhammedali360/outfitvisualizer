@@ -1,0 +1,202 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>normcheck</title></head>
+  <body>
+    <pre id="out">running…</pre>
+    <div id="sheet"></div>
+    <script type="module">
+      import { normalizeGarment, frameSize } from '/src/lib/normalize.ts'
+
+      // ---- synthetic garments (unit = shoulder width S for tops, waist W for bottoms)
+      function teePath(ctx, S, lengthRatio, sleeveDown) {
+        // sleeveDown mimics a worn shot: arms at the sides, sleeves hugging the torso.
+        const L = S * lengthRatio
+        const outX = sleeveDown ? 0.52 : 0.85
+        const outYb = sleeveDown ? 0.5 : 0.42
+        const p = [
+          [-0.13, 0], [-0.5, 0.04], [-outX, 0.06], [-outX, outYb], [-0.44, 0.45],
+          [-0.48, L / S], [0.48, L / S], [0.44, 0.45], [outX, outYb], [outX, 0.06],
+          [0.5, 0.04], [0.13, 0],
+        ]
+        ctx.beginPath()
+        p.forEach(([x, y], i) => (i ? ctx.lineTo(x * S, y * S) : ctx.moveTo(x * S, y * S)))
+        ctx.closePath()
+        ctx.fill()
+      }
+
+      function pantsPath(ctx, W, lengthRatio) {
+        const L = W * lengthRatio
+        const p = [
+          [-0.5, 0], [-0.575, 0.14], [-0.5, L / W], [-0.17, L / W], [-0.08, 0.42],
+          [0.08, 0.42], [0.17, L / W], [0.5, L / W], [0.575, 0.14], [0.5, 0],
+        ]
+        ctx.beginPath()
+        p.forEach(([x, y], i) => (i ? ctx.lineTo(x * W, y * W) : ctx.moveTo(x * W, y * W)))
+        ctx.closePath()
+        ctx.fill()
+      }
+
+      async function render(draw, unit, rotDeg, canvasW, canvasH, color) {
+        const c = document.createElement('canvas')
+        c.width = canvasW
+        c.height = canvasH
+        const ctx = c.getContext('2d')
+        ctx.save()
+        ctx.translate(canvasW / 2, canvasH * 0.2)
+        ctx.rotate((rotDeg * Math.PI) / 180)
+        ctx.fillStyle = color
+        draw(ctx, unit)
+        ctx.restore()
+        return await new Promise(r => c.toBlob(r, 'image/png'))
+      }
+
+      // ---- independent measurement of the OUTPUT (raw pixels, not the anchor code)
+      async function measure(blob) {
+        const bmp = await createImageBitmap(blob)
+        const c = document.createElement('canvas')
+        c.width = bmp.width
+        c.height = bmp.height
+        const ctx = c.getContext('2d', { willReadFrequently: true })
+        ctx.drawImage(bmp, 0, 0)
+        const { data } = ctx.getImageData(0, 0, bmp.width, bmp.height)
+        const rows = []
+        let top = -1, bottom = -1, minX = bmp.width, maxX = -1
+        for (let y = 0; y < bmp.height; y++) {
+          let l = -1, r = -1
+          for (let x = 0; x < bmp.width; x++) {
+            if (data[(y * bmp.width + x) * 4 + 3] > 16) { if (l < 0) l = x; r = x }
+          }
+          rows[y] = l < 0 ? null : [l, r]
+          if (l >= 0) {
+            if (top < 0) top = y
+            bottom = y
+            if (l < minX) minX = l
+            if (r > maxX) maxX = r
+          }
+        }
+        bmp.close()
+        return { w: c.width, h: c.height, rows, top, bottom, minX, maxX }
+      }
+
+      const results = []
+      const fail = []
+      function check(name, cond, detail) {
+        results.push(`${cond ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`)
+        if (!cond) fail.push(name)
+      }
+      const near = (a, b, tol) => Math.abs(a - b) <= tol
+
+      // torso width of a normalized top: measured at 65% depth, same band the
+      // normalizer uses, but computed here from raw pixels.
+      function bodyWidth(m, lo, hi) {
+        const span = m.bottom - m.top
+        const ws = []
+        for (let y = Math.round(m.top + lo * span); y <= m.top + hi * span; y++) {
+          if (rowsAt(m, y)) ws.push(rowsAt(m, y)[1] - rowsAt(m, y)[0] + 1)
+        }
+        ws.sort((a, b) => a - b)
+        return ws.length ? ws[ws.length >> 1] : 0
+      }
+      const rowsAt = (m, y) => (y >= 0 && y < m.h ? m.rows[y] : null)
+
+      const cases = [
+        // name, category, draw, unit, lengthRatio, rot, canvas, sleeveDown
+        ['tee flat-lay upright',   'top', 'tee', 300, 1.4, 0,   [900, 900], false],
+        ['tee flat-lay +20°',      'top', 'tee', 300, 1.4, 20,  [900, 900], false],
+        ['tee flat-lay -14°',      'top', 'tee', 300, 1.4, -14, [900, 900], false],
+        ['tee flat-lay tiny/2x',   'top', 'tee', 150, 1.4, 0,   [500, 500], false],
+        ['tee worn (sleeves down)','top', 'tee', 300, 1.4, 0,   [900, 900], true],
+        ['tunic (long top)',       'top', 'tee', 300, 1.7, 0,   [900, 1000], true],
+        ['long coat',              'top', 'tee', 300, 2.3, 0,   [900, 1200], true],
+        ['jacket (layer)',       'layer', 'tee', 300, 1.5, 0,   [900, 1000], true],
+        ['jacket (layer) +16°',  'layer', 'tee', 300, 1.5, 16,  [1100, 1100], true],
+        ['pants upright',       'bottom', 'pants', 300, 2.6, 0,  [900, 1100], false],
+        ['pants +18°',          'bottom', 'pants', 300, 2.6, 18, [1100, 1100], false],
+        ['pants small',         'bottom', 'pants', 160, 2.6, 0,  [600, 700], false],
+        ['shorts',              'bottom', 'pants', 300, 1.1, 0,  [900, 700], false],
+      ]
+
+      const sheet = document.getElementById('sheet')
+      const measured = {}
+
+      for (const [name, cat, shape, unit, ratio, rot, [cw, ch], down] of cases) {
+        const draw =
+          shape === 'tee' ? (ctx, u) => teePath(ctx, u, ratio, down) : (ctx, u) => pantsPath(ctx, u, ratio)
+        const input = await render(draw, unit, rot, cw, ch, '#4477cc')
+        const out = await normalizeGarment(input, cat, null)
+        const m = await measure(out)
+        measured[name] = { m, cat }
+
+        const img = new Image()
+        img.src = URL.createObjectURL(out)
+        img.style.cssText = 'height:170px;border:1px solid #ccc;margin:2px;background:#eee'
+        img.title = name
+        sheet.appendChild(img)
+
+        const fs = frameSize(cat)
+        check(`${name}: frame size`, m.w === fs.w && m.h === fs.h, `${m.w}x${m.h} want ${fs.w}x${fs.h}`)
+        check(`${name}: not cropped`, m.minX > 0 && m.maxX < m.w - 1 && m.top > 0 && m.bottom < m.h - 1,
+          `bbox x[${m.minX},${m.maxX}] y[${m.top},${m.bottom}]`)
+      }
+
+      // --- invariants across presentations of the same garment ---
+      const band = c => (c === 'bottom' ? [0.12, 0.24] : [0.55, 0.75])
+      const bw = n => bodyWidth(measured[n].m, ...band(measured[n].cat))
+      const hangY = n => measured[n].m.top
+      const cx = n => (measured[n].m.minX + measured[n].m.maxX) / 2
+
+      const teeSet = ['tee flat-lay upright', 'tee flat-lay +20°', 'tee flat-lay -14°', 'tee flat-lay tiny/2x']
+      const base = bw(teeSet[0])
+      for (const n of teeSet.slice(1)) {
+        check(`${n}: body width matches upright`, near(bw(n), base, base * 0.06), `${bw(n)} vs ${base}`)
+        check(`${n}: hang line matches upright`, near(hangY(n), hangY(teeSet[0]), 28),
+          `top ${hangY(n)} vs ${hangY(teeSet[0])}`)
+      }
+      check('worn tee body width matches flat-lay', near(bw('tee worn (sleeves down)'), base, base * 0.08),
+        `${bw('tee worn (sleeves down)')} vs ${base}`)
+
+      const pantSet = ['pants upright', 'pants +18°', 'pants small']
+      const pbase = bw(pantSet[0])
+      for (const n of pantSet.slice(1)) {
+        check(`${n}: hip width matches upright`, near(bw(n), pbase, pbase * 0.06), `${bw(n)} vs ${pbase}`)
+        check(`${n}: waistband matches upright`, near(hangY(n), hangY(pantSet[0]), 28),
+          `top ${hangY(n)} vs ${hangY(pantSet[0])}`)
+      }
+
+      // everything centred
+      for (const n of Object.keys(measured)) {
+        check(`${n}: centred`, near(cx(n), measured[n].m.w / 2, measured[n].m.w * 0.04),
+          `cx ${Math.round(cx(n))} of ${measured[n].m.w}`)
+      }
+
+      // the headline fix: pieces of different lengths present at the same body
+      // width, where bbox-fitting scaled each one to its own bounding box.
+      check('tunic body width matches tee', near(bw('tunic (long top)'), base, base * 0.08),
+        `${bw('tunic (long top)')} vs ${base}`)
+
+      // Past a certain length the canonical width no longer fits the frame. The
+      // contract there is: shrink only as far as needed, never crop — so the
+      // piece should be narrower than canonical *and* fill the frame vertically.
+      const coat = measured['long coat'].m
+      check('long coat shrinks rather than crops', bw('long coat') < base,
+        `${bw('long coat')} vs canonical ${base}`)
+      check('long coat fills frame height', (coat.bottom - coat.top) / coat.h > 0.85,
+        `${Math.round(((coat.bottom - coat.top) / coat.h) * 100)}% of frame height`)
+      check('shorts hip width matches pants', near(bw('shorts'), pbase, pbase * 0.12),
+        `${bw('shorts')} vs ${pbase}`)
+
+      // Outerwear is its own category with its own (wider) frame, so it can't be
+      // compared against the tees — but it has to be self-consistent.
+      check('rotated jacket matches upright', near(bw('jacket (layer) +16°'), bw('jacket (layer)'),
+        bw('jacket (layer)') * 0.06), `${bw('jacket (layer) +16°')} vs ${bw('jacket (layer)')}`)
+      check('rotated jacket hang line matches upright',
+        near(hangY('jacket (layer) +16°'), hangY('jacket (layer)'), 28),
+        `top ${hangY('jacket (layer) +16°')} vs ${hangY('jacket (layer)')}`)
+
+      document.getElementById('out').textContent =
+        results.join('\n') + `\n\n${fail.length ? 'FAILURES: ' + fail.length : 'ALL PASS'}`
+      window.__done = true
+      window.__fail = fail.length
+    </script>
+  </body>
+</html>

@@ -10,8 +10,8 @@ import {
 import { cap, extractColors } from '../lib/colors'
 import { eraseFaces } from '../lib/face'
 import { composeGarment, segmentClothes, type ClothesSegmentation } from '../lib/garment'
-import { cropBlob, trimTransparent, type CropRect } from '../lib/image'
-import { frameToStandard, normalizeGarment } from '../lib/normalize'
+import { cropBlob, type CropRect } from '../lib/image'
+import { normalizeGarment } from '../lib/normalize'
 import { detectPose, garmentTilt, type PoseResult } from '../lib/pose'
 import CropSelector from './CropSelector'
 
@@ -197,6 +197,9 @@ export default function UploadModal({
           if (jobRef.current !== job) return
         }
         const pose = cache?.pose ?? null
+        // A mixed 'any' cutout doesn't hang off one body line, so don't trust
+        // pose for it. Passing null lets normalization read the tilt off the
+        // silhouette instead, which still works for a mixed piece.
         const tilt = pose && note === null ? garmentTilt(pose, cat) : null
         const normalized = await normalizeGarment(res.blob, cat, tilt).catch(() => res.blob)
         if (jobRef.current !== job) return
@@ -238,10 +241,11 @@ export default function UploadModal({
       setProgress('Checking for faces…')
       const faceResult = await eraseFaces(out)
       if (jobRef.current !== job) return
-      const frame = (b: Blob) =>
-        trimTransparent(b)
-          .catch(() => b)
-          .then(t => frameToStandard(t, category).catch(() => t))
+      setProgress('Straightening and framing…')
+      // No pose here — this path exists because the parse found nothing, which
+      // usually means there's no body in the photo. Normalization falls back to
+      // the garment's own symmetry axis.
+      const frame = (b: Blob) => normalizeGarment(b, category, null).catch(() => b)
       const trimmedKeep = await frame(out)
       const trimmedNoFace = faceResult.faces > 0 ? await frame(faceResult.blob) : trimmedKeep
       if (jobRef.current !== job) return

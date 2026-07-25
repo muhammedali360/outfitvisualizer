@@ -8,15 +8,14 @@ import {
   WARMTH_LABELS,
 } from '../types'
 import { cap, extractColors } from '../lib/colors'
-import { trimTransparent } from '../lib/image'
-import { frameToStandard } from '../lib/normalize'
+import { normalizeGarment } from '../lib/normalize'
 import { statFor, wearSummary, type WearStat } from '../lib/wear'
 
 /**
  * Fix up a piece after the fact — rename it, re-file it, mark it as being in
- * the laundry. Re-filing also re-frames the cutout to the new category's
- * standard aspect and re-reads its colors, so a mis-tagged jacket doesn't stay
- * stuck in a top-shaped frame.
+ * the laundry. Re-filing also re-normalizes the cutout for the new category
+ * and re-reads its colors, so a mis-tagged jacket doesn't stay stuck in a
+ * top-shaped frame.
  */
 export default function EditItemModal({
   item,
@@ -49,9 +48,10 @@ export default function EditItemModal({
     try {
       let { image, colors, colorNames } = item
       if (category !== item.category) {
-        image = await trimTransparent(image)
-          .catch(() => image)
-          .then(t => frameToStandard(t, category).catch(() => t))
+        // Re-normalize for the new category: it anchors and scales differently
+        // (a top hangs from the shoulders, bottoms from the waistband) and the
+        // standard frame is a different shape.
+        image = await normalizeGarment(image, category, null).catch(() => image)
         const fresh = await extractColors(image).catch(() => [])
         if (fresh.length) {
           colors = fresh.map(c => c.hex)
