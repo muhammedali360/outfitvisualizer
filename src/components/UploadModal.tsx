@@ -36,7 +36,7 @@ export default function UploadModal({
   const [eraseFace, setEraseFace] = useState(true)
   const [useCutout, setUseCutout] = useState(true)
   const [method, setMethod] = useState<Method>(null)
-  const [smartMissed, setSmartMissed] = useState(false)
+  const [smartNote, setSmartNote] = useState<'any' | 'bg' | null>(null)
   const [status, setStatus] = useState<Status>('processing')
   const [progress, setProgress] = useState('')
   const [category, setCategory] = useState<Category>('top')
@@ -105,7 +105,7 @@ export default function UploadModal({
     setFaces(0)
     setFaceOk(true)
     setMethod(null)
-    setSmartMissed(false)
+    setSmartNote(null)
     setPrimaryColor(null)
     segCacheRef.current = null
     composedCatRef.current = null
@@ -139,7 +139,7 @@ export default function UploadModal({
     lastModeRef.current = mode
     segCacheRef.current = null
     composedCatRef.current = null
-    setSmartMissed(false)
+    setSmartNote(null)
     setStage('edit')
     setStatus('processing')
     setProgress('Preparing…')
@@ -171,7 +171,15 @@ export default function UploadModal({
         if (jobRef.current !== job) return
         segCacheRef.current = { source, seg }
       }
-      const res = await composeGarment(source, seg, cat)
+      // Exact category first; if that garment isn't found, fall back to every
+      // wearable pixel from the same parse (still no skin/face/background,
+      // and no extra model download).
+      let res = await composeGarment(source, seg, cat)
+      let note: 'any' | null = null
+      if (!res) {
+        res = await composeGarment(source, seg, 'any')
+        note = 'any'
+      }
       if (jobRef.current !== job) return
       if (res) {
         const trimmed = await trimTransparent(res.blob).catch(() => res.blob)
@@ -181,16 +189,17 @@ export default function UploadModal({
         setFaces(0)
         setFaceOk(true)
         setMethod('smart')
+        setSmartNote(note)
         setStatus('cutout')
         return
       }
     } catch {
       if (jobRef.current !== job) return
     }
-    // The parser couldn't find that garment (flat-lay shots, unusual pieces):
+    // No wearable pixels found at all (flat-lay shots, unusual pieces):
     // degrade to plain background removal.
     if (jobRef.current !== job) return
-    setSmartMissed(true)
+    setSmartNote('bg')
     setProgress('Falling back to background removal…')
     await bgRemovePath(source, job)
   }
@@ -306,16 +315,21 @@ export default function UploadModal({
               )}
               {status === 'cutout' && (
                 <>
-                  {method === 'smart' && (
+                  {method === 'smart' && smartNote === null && (
                     <div className="sub good-note">
                       ✂️ Grabbed just the {CATEGORY_LABELS[category]} — skin, face and everything
                       else left out.
                     </div>
                   )}
-                  {method === 'bg' && smartMissed && (
+                  {method === 'smart' && smartNote === 'any' && (
                     <div className="sub">
-                      Couldn't isolate a distinct {CATEGORY_LABELS[category]} — removed the
-                      background instead.
+                      Couldn't isolate just the {CATEGORY_LABELS[category]} — grabbed the clothing
+                      it found instead. Wrong piece? Switch the category chips.
+                    </div>
+                  )}
+                  {method === 'bg' && smartNote === 'bg' && (
+                    <div className="sub">
+                      Couldn't spot clothing in the photo — removed the background instead.
                     </div>
                   )}
                   <label className="check">

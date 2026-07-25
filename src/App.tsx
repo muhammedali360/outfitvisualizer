@@ -99,7 +99,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="logo">
-          Fit<span>Check</span>
+          Fit<span>Check</span> <em className="ver">v0.3</em>
         </div>
         <nav className="tabs">
           {(Object.keys(TAB_TITLES) as Tab[]).map(t => (

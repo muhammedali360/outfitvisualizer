@@ -16,6 +16,20 @@ const CATEGORY_TO_LABELS: Record<Category, string[]> = {
   shoes: ['Left-shoe', 'Right-shoe'],
 }
 
+/** Every wearable class — used when the specific category comes up empty. */
+const ANY_CLOTHING = [
+  'Hat',
+  'Upper-clothes',
+  'Skirt',
+  'Pants',
+  'Dress',
+  'Belt',
+  'Left-shoe',
+  'Right-shoe',
+  'Scarf',
+  'Bag',
+]
+
 interface MaskLike {
   data: Uint8ClampedArray | Uint8Array
   width: number
@@ -79,10 +93,10 @@ export async function segmentClothes(
 export async function composeGarment(
   source: Blob,
   seg: ClothesSegmentation,
-  category: Category,
+  category: Category | 'any',
   minCoverage = 0.005,
 ): Promise<{ blob: Blob; coverage: number } | null> {
-  const wanted = new Set(CATEGORY_TO_LABELS[category])
+  const wanted = new Set(category === 'any' ? ANY_CLOTHING : CATEGORY_TO_LABELS[category])
   const masks = seg.filter(s => wanted.has(s.label)).map(s => s.mask)
   if (masks.length === 0) return null
 

@@ -87,6 +87,14 @@ input {
   color: var(--accent);
 }
 
+.logo .ver {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-style: normal;
+  font-size: 0.6rem;
+  color: var(--muted);
+  vertical-align: super;
+}
+
 .tabs {
   display: flex;
   gap: 6px;
