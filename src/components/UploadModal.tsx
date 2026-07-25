@@ -11,6 +11,8 @@ import { cap, extractColors } from '../lib/colors'
 import { eraseFaces } from '../lib/face'
 import { composeGarment, segmentClothes, type ClothesSegmentation } from '../lib/garment'
 import { cropBlob, trimTransparent, type CropRect } from '../lib/image'
+import { frameToStandard, normalizeGarment } from '../lib/normalize'
+import { detectPose, garmentTilt, type PoseResult } from '../lib/pose'
 import CropSelector from './CropSelector'
 
 type Stage = 'pick' | 'crop' | 'edit'
@@ -47,7 +49,11 @@ export default function UploadModal({
   const [formality, setFormality] = useState<Formality>(1)
   const [saving, setSaving] = useState(false)
   const jobRef = useRef(0)
-  const segCacheRef = useRef<{ source: Blob; seg: ClothesSegmentation } | null>(null)
+  const segCacheRef = useRef<{
+    source: Blob
+    seg: ClothesSegmentation
+    pose?: PoseResult | null
+  } | null>(null)
   const composedCatRef = useRef<Category | null>(null)
   const lastModeRef = useRef<'smart' | 'bg' | null>(null)
 
@@ -182,10 +188,20 @@ export default function UploadModal({
       }
       if (jobRef.current !== job) return
       if (res) {
-        const trimmed = await trimTransparent(res.blob).catch(() => res.blob)
+        setProgress('Straightening and framing…')
+        // Pose is detected once per photo and cached with the parse, so
+        // switching category reuses it.
+        const cache = segCacheRef.current
+        if (cache && cache.pose === undefined) {
+          cache.pose = await detectPose(source)
+          if (jobRef.current !== job) return
+        }
+        const pose = cache?.pose ?? null
+        const tilt = pose && note === null ? garmentTilt(pose, cat) : null
+        const normalized = await normalizeGarment(res.blob, cat, tilt).catch(() => res.blob)
         if (jobRef.current !== job) return
-        setProcessedKeepFace(trimmed)
-        setProcessedNoFace(trimmed)
+        setProcessedKeepFace(normalized)
+        setProcessedNoFace(normalized)
         setFaces(0)
         setFaceOk(true)
         setMethod('smart')
@@ -222,11 +238,12 @@ export default function UploadModal({
       setProgress('Checking for faces…')
       const faceResult = await eraseFaces(out)
       if (jobRef.current !== job) return
-      const trimmedKeep = await trimTransparent(out).catch(() => out)
-      const trimmedNoFace =
-        faceResult.faces > 0
-          ? await trimTransparent(faceResult.blob).catch(() => faceResult.blob)
-          : trimmedKeep
+      const frame = (b: Blob) =>
+        trimTransparent(b)
+          .catch(() => b)
+          .then(t => frameToStandard(t, category).catch(() => t))
+      const trimmedKeep = await frame(out)
+      const trimmedNoFace = faceResult.faces > 0 ? await frame(faceResult.blob) : trimmedKeep
       if (jobRef.current !== job) return
       setProcessedKeepFace(trimmedKeep)
       setProcessedNoFace(trimmedNoFace)
