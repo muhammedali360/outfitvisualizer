@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import type { Category, Outfit, WardrobeItem } from '../types'
+import type { Category, Outfit, Warmth, WardrobeItem } from '../types'
 import { CATEGORIES, CATEGORY_ICONS, CATEGORY_LABELS_PLURAL } from '../types'
-import { scoreOutfit, tier } from '../lib/suggest'
+import { availableItems, hasCoreWardrobe, scoreOutfit, shuffleOutfit, tier } from '../lib/suggest'
 import Avatar from './Avatar'
 
 const Avatar3D = lazy(() => import('./Avatar3D'))
@@ -18,6 +18,9 @@ export default function OutfitBuilder({
   onSaveOutfit,
   onDeleteOutfit,
   onGoWardrobe,
+  onWoreToday,
+  wornToday,
+  targetWarmth,
 }: {
   items: WardrobeItem[]
   urls: Record<string, string>
@@ -27,6 +30,10 @@ export default function OutfitBuilder({
   onSaveOutfit: (outfit: Outfit) => void
   onDeleteOutfit: (id: string) => void
   onGoWardrobe: () => void
+  onWoreToday: (sel: Partial<Record<Category, string>>) => void
+  /** True when today's log already holds exactly this combination. */
+  wornToday: boolean
+  targetWarmth: Warmth | null
 }) {
   const [outfitName, setOutfitName] = useState('')
   const [view, setView] = useState<ViewMode>(() =>
@@ -56,11 +63,18 @@ export default function OutfitBuilder({
     return out
   }, [selection, urls])
 
+  const canShuffle = useMemo(() => hasCoreWardrobe(availableItems(items)), [items])
+
   function toggle(cat: Category, id: string) {
     const next = { ...selection }
     if (next[cat] === id) delete next[cat]
     else next[cat] = id
     onChange(next)
+  }
+
+  function shuffle() {
+    const next = shuffleOutfit(items, { targetWarmth: targetWarmth ?? undefined }, selection)
+    if (next) onChange(next.selection)
   }
 
   if (items.length === 0) {
@@ -79,16 +93,30 @@ export default function OutfitBuilder({
   return (
     <section className="studio">
       <div className="studio-left card">
-        <div className="view-toggle">
-          {(['2d', '3d'] as ViewMode[]).map(v => (
-            <button
-              key={v}
-              className={view === v ? 'seg active' : 'seg'}
-              onClick={() => setView(v)}
-            >
-              {v === '2d' ? '2-D' : '3-D'}
-            </button>
-          ))}
+        <div className="studio-controls">
+          <div className="view-toggle">
+            {(['2d', '3d'] as ViewMode[]).map(v => (
+              <button
+                key={v}
+                className={view === v ? 'seg active' : 'seg'}
+                onClick={() => setView(v)}
+              >
+                {v === '2d' ? '2-D' : '3-D'}
+              </button>
+            ))}
+          </div>
+          <button
+            className="btn ghost small"
+            onClick={shuffle}
+            disabled={!canShuffle}
+            title={
+              canShuffle
+                ? 'Random outfit, weighted toward the ones that actually work'
+                : 'Needs a top, bottoms and shoes that are out of the laundry'
+            }
+          >
+            🎲 Shuffle
+          </button>
         </div>
         {view === '2d' ? (
           <Avatar images={images} showHints />
@@ -120,16 +148,22 @@ export default function OutfitBuilder({
                 <div className="sub">None yet — add some in the wardrobe.</div>
               ) : (
                 <div className="thumb-row">
-                  {group.map(item => (
-                    <button
-                      key={item.id}
-                      title={item.name}
-                      className={selection[cat] === item.id ? 'thumb active' : 'thumb'}
-                      onClick={() => toggle(cat, item.id)}
-                    >
-                      <img src={urls[item.id]} alt={item.name} />
-                    </button>
-                  ))}
+                  {group.map(item => {
+                    const classes = ['thumb']
+                    if (selection[cat] === item.id) classes.push('active')
+                    if (item.unavailable) classes.push('dim')
+                    return (
+                      <button
+                        key={item.id}
+                        title={item.unavailable ? `${item.name} — in the laundry` : item.name}
+                        className={classes.join(' ')}
+                        onClick={() => toggle(cat, item.id)}
+                      >
+                        <img src={urls[item.id]} alt={item.name} />
+                        {item.unavailable && <span className="thumb-flag">🧺</span>}
+                      </button>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -188,6 +222,19 @@ export default function OutfitBuilder({
             Save outfit
           </button>
         </div>
+
+        <button
+          className={wornToday ? 'btn wide worn' : 'btn wide'}
+          disabled={chosen.length < 2}
+          title={
+            chosen.length < 2
+              ? 'Pick at least two pieces first'
+              : 'Log this as what you wore today — it feeds your wear history'
+          }
+          onClick={() => onWoreToday({ ...selection })}
+        >
+          {wornToday ? '✓ Logged as worn today' : '👕 I wore this today'}
+        </button>
 
         {outfits.length > 0 && (
           <div className="saved-outfits">

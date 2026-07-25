@@ -1,4 +1,5 @@
 import type { PoseLandmarker } from '@mediapipe/tasks-vision'
+import type { Category } from '../types'
 
 const MEDIAPIPE_VERSION = '0.10.14'
 const MODEL_URL =
@@ -68,12 +69,9 @@ export async function detectPose(blob: Blob): Promise<PoseResult | null> {
  * line it hangs from: shoulders for tops, hips for bottoms, ears for hats.
  * Returns null when the relevant landmarks aren't confidently visible.
  */
-export function garmentTilt(
-  pose: PoseResult,
-  category: 'hat' | 'top' | 'bottom' | 'shoes',
-): number | null {
+export function garmentTilt(pose: PoseResult, category: Category): number | null {
   const pair =
-    category === 'top'
+    category === 'top' || category === 'layer'
       ? [LEFT_SHOULDER, RIGHT_SHOULDER]
       : category === 'bottom'
         ? [LEFT_HIP, RIGHT_HIP]

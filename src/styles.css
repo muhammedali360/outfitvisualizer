@@ -299,26 +299,124 @@ label.btn {
   box-shadow: var(--shadow);
 }
 
-.item-card .del {
+.item-card.unavailable {
+  opacity: 0.62;
+}
+
+.card-tools {
   position: absolute;
   top: 8px;
   right: 8px;
   z-index: 2;
-  border: none;
-  background: rgba(255, 253, 249, 0.9);
-  border-radius: 8px;
-  padding: 3px 7px;
-  color: var(--muted);
+  display: flex;
+  gap: 4px;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
 
-.item-card:hover .del {
+.item-card:hover .card-tools,
+.item-card:focus-within .card-tools {
   opacity: 1;
 }
 
-.item-card .del:hover {
-  color: var(--bad);
+.card-tools .tool {
+  border: 1px solid var(--line);
+  background: rgba(255, 253, 249, 0.94);
+  border-radius: 8px;
+  padding: 3px 7px;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.card-tools .tool:hover {
+  border-color: #d5cdc0;
+}
+
+.laundry-flag {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  background: rgba(255, 253, 249, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.item-img {
+  position: relative;
+}
+
+.item-wear {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+h3 .count {
+  display: inline-block;
+  margin-left: 4px;
+  color: #b3a897;
+  letter-spacing: 0;
+}
+
+.filter-note {
+  margin-top: 20px;
+}
+
+.linkish {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  font-size: inherit;
+}
+
+/* ---------- wardrobe toolbar ---------- */
+
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.toolbar .search {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: var(--bg);
+}
+
+.toolbar .search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sort-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sort-select select {
+  font: inherit;
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 10px;
+  background: var(--card);
 }
 
 .item-img {
@@ -716,6 +814,7 @@ label.btn {
 }
 
 .thumb {
+  position: relative;
   flex-shrink: 0;
   width: 76px;
   height: 76px;
@@ -999,6 +1098,184 @@ label.btn {
 
 .suggestion-card .btn {
   margin-top: auto;
+}
+
+/* ---------- week planner ---------- */
+
+.day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.day-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.day-row.today {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-soft), var(--shadow);
+}
+
+.day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.day-when {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.day-weather {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.worn-badge {
+  font-size: 0.72rem;
+  color: var(--good);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+.day-empty {
+  padding: 6px 0;
+}
+
+.day-outfit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.day-outfit img {
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+  background: #f4f0e9;
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.day-names {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.day-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.day-picker {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.day-picker h3 {
+  margin: 10px 0 8px;
+}
+
+.pick-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 12px;
+  padding: 8px 10px;
+  transition: border-color 0.15s ease;
+}
+
+.pick:hover {
+  border-color: var(--accent);
+}
+
+.pick-thumbs {
+  display: flex;
+  gap: 3px;
+}
+
+.pick-thumbs img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  background: #f4f0e9;
+  border-radius: 6px;
+}
+
+.pick-name {
+  font-size: 0.76rem;
+  color: var(--muted);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- shared additions ---------- */
+
+.studio-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.studio-controls .view-toggle {
+  margin: 0;
+}
+
+.thumb.dim img {
+  opacity: 0.4;
+}
+
+.thumb-flag {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 0.65rem;
+}
+
+.btn.worn {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.btn.danger {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.btn.danger:hover {
+  background: var(--bad);
+  color: #fff;
+}
+
+.btn.wide:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* ---------- responsive ---------- */

@@ -11,12 +11,16 @@ interface Slot {
 const SLOTS: Record<Category, Slot> = {
   hat: { x: 103, y: 2, w: 114, h: 74, align: 'xMidYMax' },
   top: { x: 56, y: 114, w: 208, h: 218, align: 'xMidYMin' },
+  // Outerwear sits over the top: a touch wider and higher, so the top's
+  // neckline still reads underneath.
+  layer: { x: 40, y: 108, w: 240, h: 244, align: 'xMidYMin' },
   bottom: { x: 78, y: 306, w: 164, h: 238, align: 'xMidYMin' },
   shoes: { x: 68, y: 542, w: 184, h: 92, align: 'xMidYMax' },
 }
 
-// Paint bottoms first so the top overlaps the waist, hat last so it sits on top.
-const ORDER: Category[] = ['bottom', 'top', 'shoes', 'hat']
+// Paint bottoms first so the top overlaps the waist, then the outer layer over
+// the top, hat last so it sits above everything.
+const ORDER: Category[] = ['bottom', 'top', 'layer', 'shoes', 'hat']
 
 export default function Avatar({
   images,
@@ -43,7 +47,8 @@ export default function Avatar({
         const s = SLOTS[slot]
         const href = images[slot]
         if (!href) {
-          if (!showHints) return null
+          // No empty-layer outline — it would sit right on top of the top's.
+          if (!showHints || slot === 'layer') return null
           return (
             <g key={slot}>
               <rect

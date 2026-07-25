@@ -1,4 +1,4 @@
-import type { Category, Outfit, WardrobeItem } from '../types'
+import type { Category, DayPlan, Outfit, WardrobeItem } from '../types'
 import { CATEGORIES } from '../types'
 import * as db from '../db'
 
@@ -6,25 +6,32 @@ const APP_TAG = 'fit-check'
 
 interface BackupFile {
   app: typeof APP_TAG
-  version: 1
+  /** 1 = items + outfits; 2 added the calendar/wear log and laundry state. */
+  version: 1 | 2
   exportedAt: number
   items: Array<Omit<WardrobeItem, 'image'> & { image: string }>
   outfits: Outfit[]
+  days?: DayPlan[]
 }
 
 /**
  * Download the whole closet — garment images included — as a single JSON
  * file that `importBackup` can restore on any device or domain.
  */
-export async function exportBackup(items: WardrobeItem[], outfits: Outfit[]): Promise<void> {
+export async function exportBackup(
+  items: WardrobeItem[],
+  outfits: Outfit[],
+  days: DayPlan[] = [],
+): Promise<void> {
   const payload: BackupFile = {
     app: APP_TAG,
-    version: 1,
+    version: 2,
     exportedAt: Date.now(),
     items: await Promise.all(
       items.map(async i => ({ ...i, image: await blobToDataUrl(i.image) })),
     ),
     outfits,
+    days,
   }
   const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -41,7 +48,9 @@ export async function exportBackup(items: WardrobeItem[], outfits: Outfit[]): Pr
  * Restore a backup file into IndexedDB. Entries are merged by id, so
  * re-importing the same backup is harmless. Returns how much was restored.
  */
-export async function importBackup(file: File): Promise<{ items: number; outfits: number }> {
+export async function importBackup(
+  file: File,
+): Promise<{ items: number; outfits: number; days: number }> {
   let data: unknown
   try {
     data = JSON.parse(await file.text())
@@ -70,6 +79,7 @@ export async function importBackup(file: File): Promise<{ items: number; outfits
       formality: levelOf(raw.formality, 1),
       image,
       createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : Date.now(),
+      unavailable: raw.unavailable === true,
     })
   }
 
@@ -96,9 +106,31 @@ export async function importBackup(file: File): Promise<{ items: number; outfits
     })
   }
 
+  // Calendar entries only arrived in v2 backups, and like outfits they may
+  // only reference items that survive the merge.
+  const days: DayPlan[] = []
+  for (const entry of Array.isArray(backup.days) ? (backup.days as unknown[]) : []) {
+    const raw = entry as Record<string, unknown>
+    if (!raw || typeof raw.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw.date)) continue
+    if (typeof raw.items !== 'object' || raw.items === null) continue
+    const slots: Partial<Record<Category, string>> = {}
+    for (const c of CATEGORIES) {
+      const id = (raw.items as Record<string, unknown>)[c]
+      if (typeof id === 'string' && validIds.has(id)) slots[c] = id
+    }
+    if (Object.keys(slots).length === 0) continue
+    days.push({
+      date: raw.date,
+      items: slots,
+      worn: raw.worn === true,
+      updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
+    })
+  }
+
   for (const i of items) await db.putItem(i)
   for (const o of outfits) await db.putOutfit(o)
-  return { items: items.length, outfits: outfits.length }
+  for (const d of days) await db.putDay(d)
+  return { items: items.length, outfits: outfits.length, days: days.length }
 }
 
 function levelOf(v: unknown, fallback: 1 | 2 | 3): 1 | 2 | 3 {
