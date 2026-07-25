@@ -176,6 +176,12 @@ export interface Anchors {
   width: number
   /** Horizontal midpoint at that line, as a fraction of image width. */
   centerX: number
+  /**
+   * The garment's top edge, as a fraction of image height. `y` sits a little
+   * below this (`lineDepth`); callers anchoring from some other source need the
+   * gap between the two so they can target the same line this does.
+   */
+  top: number
 }
 
 interface AnchorSpec {
@@ -271,5 +277,10 @@ export function garmentAnchors(mask: Mask, category: Category): Anchors | null {
   }
   if (centers.length === 0) return null
 
-  return { y: lineY / height, width: w / width, centerX: median(centers) / width }
+  return {
+    y: lineY / height,
+    width: w / width,
+    centerX: median(centers) / width,
+    top: topY / height,
+  }
 }

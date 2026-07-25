@@ -1,4 +1,6 @@
 import type { Category } from '../types'
+import { backend, configureWasmThreads } from './backend'
+import { cleanMask } from './mask'
 
 /**
  * Pixel-level clothing parsing (SegFormer fine-tuned on clothes, run
@@ -53,9 +55,14 @@ let segmenterPromise: Promise<Segmenter> | null = null
 
 function getSegmenter(onProgress?: (msg: string) => void): Promise<Segmenter> {
   segmenterPromise ??= (async () => {
-    const { pipeline } = await import('@huggingface/transformers')
+    const { pipeline, env } = await import('@huggingface/transformers')
+    configureWasmThreads(env)
+    // WebGPU where it exists, threaded WASM otherwise. Left at the library
+    // default this runs single-threaded on one CPU core.
+    const { device, dtype } = await backend()
     const seg = await pipeline('image-segmentation', MODEL_ID, {
-      dtype: 'q8',
+      device,
+      dtype,
       progress_callback: (p: { status?: string; progress?: number; file?: string }) => {
         if (p.status === 'progress' && typeof p.progress === 'number' && p.file?.endsWith('.onnx')) {
           onProgress?.(`Downloading garment AI… ${Math.round(p.progress)}%`)
@@ -115,6 +122,12 @@ export async function composeGarment(
       if (v > union[i]) union[i] = v
     }
   }
+  // Tidy the mask before measuring it. The parser's raw output has a wide soft
+  // edge (it runs at 512x512 and gets stretched up), plus speckle and pinholes;
+  // cleaning first means a category whose only evidence is scattered
+  // mis-labelled pixels reads as absent rather than as a tiny garment.
+  cleanMask(union, mw, mh)
+
   let on = 0
   for (let i = 0; i < union.length; i++) if (union[i] > 127) on++
   const coverage = on / union.length

@@ -11,8 +11,9 @@ import { cap, extractColors } from '../lib/colors'
 import { eraseFaces } from '../lib/face'
 import { composeGarment, segmentClothes, type ClothesSegmentation } from '../lib/garment'
 import { cropBlob, type CropRect } from '../lib/image'
+import { refineMatte } from '../lib/matte'
 import { normalizeGarment } from '../lib/normalize'
-import { detectPose, garmentTilt, type PoseResult } from '../lib/pose'
+import { detectPose, garmentTilt, poseAnchor, type PoseResult } from '../lib/pose'
 import CropSelector from './CropSelector'
 
 type Stage = 'pick' | 'crop' | 'edit'
@@ -188,11 +189,11 @@ export default function UploadModal({
       }
       if (jobRef.current !== job) return
       if (res) {
-        setProgress('Straightening and framing…')
         // Pose is detected once per photo and cached with the parse, so
         // switching category reuses it.
         const cache = segCacheRef.current
         if (cache && cache.pose === undefined) {
+          setProgress('Reading the pose…')
           cache.pose = await detectPose(source)
           if (jobRef.current !== job) return
         }
@@ -201,7 +202,19 @@ export default function UploadModal({
         // pose for it. Passing null lets normalization read the tilt off the
         // silhouette instead, which still works for a mixed piece.
         const tilt = pose && note === null ? garmentTilt(pose, cat) : null
-        const normalized = await normalizeGarment(res.blob, cat, tilt).catch(() => res.blob)
+        const anchor = pose && note === null ? poseAnchor(pose, cat) : null
+
+        // Refine the edges while the cutout is still full-resolution and
+        // aligned with the photo — the matte needs the original pixels, and
+        // normalization is about to rotate and crop them.
+        const refined = await refineMatte(source, res.blob, msg => {
+          if (jobRef.current === job) setProgress(msg)
+        })
+        if (jobRef.current !== job) return
+        const cut = refined ?? res.blob
+
+        setProgress('Straightening and framing…')
+        const normalized = await normalizeGarment(cut, cat, tilt, anchor).catch(() => cut)
         if (jobRef.current !== job) return
         setProcessedKeepFace(normalized)
         setProcessedNoFace(normalized)
@@ -238,15 +251,23 @@ export default function UploadModal({
         },
       })
       if (jobRef.current !== job) return
+      // Refine before erasing faces, not after: the matte recomposites the
+      // original photo's pixels under a new alpha, so running it second would
+      // paint an erased face straight back in.
+      const refined = await refineMatte(source, out, msg => {
+        if (jobRef.current === job) setProgress(msg)
+      })
+      if (jobRef.current !== job) return
+      const cut = refined ?? out
       setProgress('Checking for faces…')
-      const faceResult = await eraseFaces(out)
+      const faceResult = await eraseFaces(cut)
       if (jobRef.current !== job) return
       setProgress('Straightening and framing…')
       // No pose here — this path exists because the parse found nothing, which
       // usually means there's no body in the photo. Normalization falls back to
       // the garment's own symmetry axis.
       const frame = (b: Blob) => normalizeGarment(b, category, null).catch(() => b)
-      const trimmedKeep = await frame(out)
+      const trimmedKeep = await frame(cut)
       const trimmedNoFace = faceResult.faces > 0 ? await frame(faceResult.blob) : trimmedKeep
       if (jobRef.current !== job) return
       setProcessedKeepFace(trimmedKeep)

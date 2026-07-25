@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "normcheck": "node dev/normcheck.mjs"
+    "normcheck": "node dev/normcheck.mjs",
+    "pipecheck": "node dev/pipecheck.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

@@ -64,26 +64,65 @@ export async function detectPose(blob: Blob): Promise<PoseResult | null> {
   }
 }
 
+/** The landmark pair defining the line a category's garment hangs from. */
+function hangPair(category: Category): [number, number] | null {
+  if (category === 'top' || category === 'layer') return [LEFT_SHOULDER, RIGHT_SHOULDER]
+  if (category === 'bottom') return [LEFT_HIP, RIGHT_HIP]
+  if (category === 'hat') return [LEFT_EAR, RIGHT_EAR]
+  return null
+}
+
+/** Both endpoints of that line in source pixels, when both are confident. */
+function hangPoints(
+  pose: PoseResult,
+  category: Category,
+): { ax: number; ay: number; bx: number; by: number } | null {
+  const pair = hangPair(category)
+  if (!pair) return null
+  const a = pose.points[pair[0]]
+  const b = pose.points[pair[1]]
+  if (!a || !b || a.visibility < 0.6 || b.visibility < 0.6) return null
+  return {
+    ax: a.x * pose.width,
+    ay: a.y * pose.height,
+    bx: b.x * pose.width,
+    by: b.y * pose.height,
+  }
+}
+
+/** A point on the wearer's body, in pixels of the photo it was detected in. */
+export interface PoseAnchor {
+  x: number
+  y: number
+}
+
+/**
+ * The midpoint of the body line the garment hangs from — the shoulder line for
+ * tops, the waistband for bottoms — in source pixels.
+ *
+ * Normalization otherwise has to infer this from the cutout's own bounding box,
+ * which assumes the garment's proportions are typical for its category. On a
+ * worn photo that assumption breaks in exactly the cases you'd notice: sleeves
+ * hanging alongside the torso widen the silhouette, an untucked hem stretches
+ * it downwards, and the inferred hang line drifts. When there's a body in the
+ * frame we can read the real line instead of guessing at it.
+ */
+export function poseAnchor(pose: PoseResult, category: Category): PoseAnchor | null {
+  const p = hangPoints(pose, category)
+  if (!p) return null
+  return { x: (p.ax + p.bx) / 2, y: (p.ay + p.by) / 2 }
+}
+
 /**
  * How many degrees the garment is tilted in the photo, judged by the body
  * line it hangs from: shoulders for tops, hips for bottoms, ears for hats.
  * Returns null when the relevant landmarks aren't confidently visible.
  */
 export function garmentTilt(pose: PoseResult, category: Category): number | null {
-  const pair =
-    category === 'top' || category === 'layer'
-      ? [LEFT_SHOULDER, RIGHT_SHOULDER]
-      : category === 'bottom'
-        ? [LEFT_HIP, RIGHT_HIP]
-        : category === 'hat'
-          ? [LEFT_EAR, RIGHT_EAR]
-          : null
-  if (!pair) return null
-  const a = pose.points[pair[0]]
-  const b = pose.points[pair[1]]
-  if (!a || !b || a.visibility < 0.6 || b.visibility < 0.6) return null
-  const dx = (b.x - a.x) * pose.width
-  const dy = (b.y - a.y) * pose.height
+  const p = hangPoints(pose, category)
+  if (!p) return null
+  const dx = p.bx - p.ax
+  const dy = p.by - p.ay
   if (Math.abs(dx) < 1) return null
   let deg = (Math.atan2(dy, dx) * 180) / Math.PI
   if (deg > 90) deg -= 180
