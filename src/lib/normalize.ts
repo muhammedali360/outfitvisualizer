@@ -1,5 +1,6 @@
 import type { Category } from '../types'
-import { canvasToBlob, trimTransparent } from './image'
+import { canvasToBlob, trimTransparentTracked } from './image'
+import type { PoseAnchor } from './pose'
 import { garmentAnchors, maskFromBlob, symmetryTilt } from './silhouette'
 
 /**
@@ -80,21 +81,41 @@ export async function normalizeGarment(
   blob: Blob,
   category: Category,
   tiltDeg: number | null,
+  anchor: PoseAnchor | null = null,
 ): Promise<Blob> {
   let out = blob
   let tilt = tiltDeg
+  // The anchor is in pixels of `blob`, so it has to be carried through the same
+  // rotate-and-crop the image goes through or it stops pointing at the body.
+  let point = anchor
   if (!usableTilt(tilt)) {
     // No body in frame (or the landmarks weren't confident) — read the tilt off
     // the garment's own outline instead.
     const mask = await maskFromBlob(blob).catch(() => null)
     tilt = mask ? symmetryTilt(mask, category, MAX_TILT) : null
   }
-  if (usableTilt(tilt)) out = await straighten(out, tilt).catch(() => out)
-  out = await trimTransparent(out).catch(() => out)
-  return placeOnFrame(out, category).catch(() => out)
+  if (usableTilt(tilt)) {
+    const rotated = await straighten(out, tilt).catch(() => null)
+    if (rotated) {
+      out = rotated.blob
+      if (point) point = rotatePoint(point, tilt, rotated.from, rotated.to)
+    }
+  }
+  const trimmed = await trimTransparentTracked(out).catch(() => null)
+  if (trimmed) {
+    out = trimmed.blob
+    if (point) point = { x: point.x - trimmed.offsetX, y: point.y - trimmed.offsetY }
+  }
+  return placeOnFrame(out, category, point).catch(() => out)
 }
 
-async function straighten(blob: Blob, tiltDeg: number): Promise<Blob> {
+interface Straightened {
+  blob: Blob
+  from: { w: number; h: number }
+  to: { w: number; h: number }
+}
+
+async function straighten(blob: Blob, tiltDeg: number): Promise<Straightened | null> {
   const bmp = await createImageBitmap(blob)
   try {
     const rad = (-tiltDeg * Math.PI) / 180
@@ -106,13 +127,35 @@ async function straighten(blob: Blob, tiltDeg: number): Promise<Blob> {
     canvas.width = w
     canvas.height = h
     const ctx = canvas.getContext('2d')
-    if (!ctx) return blob
+    if (!ctx) return null
     ctx.translate(w / 2, h / 2)
     ctx.rotate(rad)
     ctx.drawImage(bmp, -bmp.width / 2, -bmp.height / 2)
-    return await canvasToBlob(canvas)
+    return {
+      blob: await canvasToBlob(canvas),
+      from: { w: bmp.width, h: bmp.height },
+      to: { w, h },
+    }
   } finally {
     bmp.close()
+  }
+}
+
+/** Put a point through the same rotation `straighten` applied to the pixels. */
+function rotatePoint(
+  p: PoseAnchor,
+  tiltDeg: number,
+  from: { w: number; h: number },
+  to: { w: number; h: number },
+): PoseAnchor {
+  const rad = (-tiltDeg * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  const dx = p.x - from.w / 2
+  const dy = p.y - from.h / 2
+  return {
+    x: to.w / 2 + dx * cos - dy * sin,
+    y: to.h / 2 + dx * sin + dy * cos,
   }
 }
 
@@ -128,14 +171,42 @@ function clampOffset(offset: number, drawn: number, frame: number): number {
  * at whatever fits, so an unusually long piece shrinks rather than getting
  * cropped — alignment matters, but not enough to cut a hem off.
  */
-export async function placeOnFrame(blob: Blob, category: Category): Promise<Blob> {
+export async function placeOnFrame(
+  blob: Blob,
+  category: Category,
+  poseAnchor: PoseAnchor | null = null,
+): Promise<Blob> {
   const { w, h } = frameSize(category)
   const canon = CANON[category]
   const mask = canon ? await maskFromBlob(blob).catch(() => null) : null
-  const anchors = mask ? garmentAnchors(mask, category) : null
+  let anchors = mask ? garmentAnchors(mask, category) : null
 
   const bmp = await createImageBitmap(blob)
   try {
+    // When there's a body in the photo, the shoulder/waist line it gives us
+    // beats the silhouette's guess at where the garment hangs from — that guess
+    // assumes typical proportions for the category and drifts on worn shots.
+    //
+    // Width is deliberately still measured from the silhouette: pose landmarks
+    // sit at joint centres, not at the garment's edge, so they're not on the
+    // same scale as the CANON widths every other path is tuned against. Mixing
+    // them would make the same shirt present at two sizes depending on whether
+    // someone happened to be wearing it.
+    if (anchors && poseAnchor) {
+      // The two sources don't measure quite the same line: the silhouette puts
+      // its hang line `lineDepth` below the garment's top edge, while the pose
+      // landmark sits on the shoulder (or hip) joint itself. Shifting the pose
+      // point down by that same gap makes both target one convention, so a
+      // shirt doesn't present at two different heights depending on whether
+      // someone happened to be wearing it in the photo.
+      const drop = anchors.y - anchors.top
+      const y = poseAnchor.y / bmp.height + drop
+      const centerX = poseAnchor.x / bmp.width
+      // Ignore a landmark the crop cut away — it no longer marks anything.
+      if (y >= 0 && y <= 1 && centerX >= 0 && centerX <= 1) {
+        anchors = { ...anchors, y, centerX }
+      }
+    }
     const canvas = document.createElement('canvas')
     canvas.width = w
     canvas.height = h

@@ -34,7 +34,9 @@ try {
     }
   }
 
-  await page.waitForFunction(() => window.__done === true, { timeout: 120000 })
+  // Explicit `null`: waitForFunction is (fn, arg, options), so an options object
+  // passed second is treated as the argument and the timeout stays at 30s.
+  await page.waitForFunction(() => window.__done === true, null, { timeout: 120000 })
   console.log(await page.textContent('#out'))
   await page.locator('#sheet').screenshot({ path: 'dev/contact-sheet.png' })
   process.exitCode = (await page.evaluate(() => window.__fail)) ? 1 : 0

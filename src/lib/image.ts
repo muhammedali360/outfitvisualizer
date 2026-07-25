@@ -26,6 +26,14 @@ export async function cropBlob(blob: Blob, rect: CropRect): Promise<Blob> {
   }
 }
 
+/** A trimmed image plus where its top-left landed in the original. */
+export interface Trimmed {
+  blob: Blob
+  /** Pixels removed from the left/top edge — subtract to move a point across. */
+  offsetX: number
+  offsetY: number
+}
+
 /**
  * Crop away fully-transparent margins (plus a small padding) so a cutout
  * garment fills its mannequin slot instead of floating in empty canvas.
@@ -34,6 +42,16 @@ export async function cropBlob(blob: Blob, rect: CropRect): Promise<Blob> {
  * if there's nothing to trim.
  */
 export async function trimTransparent(blob: Blob, padFrac = 0.02): Promise<Blob> {
+  return (await trimTransparentTracked(blob, padFrac)).blob
+}
+
+/**
+ * As `trimTransparent`, but reports how far the crop moved the image. Callers
+ * carrying coordinates measured on the untrimmed image (body landmarks, say)
+ * need the offset to keep those points pointing at the same pixels.
+ */
+export async function trimTransparentTracked(blob: Blob, padFrac = 0.02): Promise<Trimmed> {
+  const untouched: Trimmed = { blob, offsetX: 0, offsetY: 0 }
   const bmp = await createImageBitmap(blob)
   try {
     const scale = Math.min(320 / bmp.width, 320 / bmp.height, 1)
@@ -43,7 +61,7 @@ export async function trimTransparent(blob: Blob, padFrac = 0.02): Promise<Blob>
     probe.width = sw
     probe.height = sh
     const pctx = probe.getContext('2d', { willReadFrequently: true })
-    if (!pctx) return blob
+    if (!pctx) return untouched
     pctx.drawImage(bmp, 0, 0, sw, sh)
     const { data } = pctx.getImageData(0, 0, sw, sh)
 
@@ -61,8 +79,8 @@ export async function trimTransparent(blob: Blob, padFrac = 0.02): Promise<Blob>
         }
       }
     }
-    if (maxX < 0) return blob
-    if (minX <= 1 && minY <= 1 && maxX >= sw - 2 && maxY >= sh - 2) return blob
+    if (maxX < 0) return untouched
+    if (minX <= 1 && minY <= 1 && maxX >= sw - 2 && maxY >= sh - 2) return untouched
 
     const pad = Math.round(Math.max(bmp.width, bmp.height) * padFrac)
     const sx = Math.max(0, Math.floor(minX / scale) - pad)
@@ -73,9 +91,9 @@ export async function trimTransparent(blob: Blob, padFrac = 0.02): Promise<Blob>
     out.width = Math.max(1, ex - sx)
     out.height = Math.max(1, ey - sy)
     const octx = out.getContext('2d')
-    if (!octx) return blob
+    if (!octx) return untouched
     octx.drawImage(bmp, sx, sy, out.width, out.height, 0, 0, out.width, out.height)
-    return await canvasToBlob(out)
+    return { blob: await canvasToBlob(out), offsetX: sx, offsetY: sy }
   } finally {
     bmp.close()
   }
