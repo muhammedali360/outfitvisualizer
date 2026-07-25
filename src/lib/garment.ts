@@ -9,9 +9,13 @@ import type { Category } from '../types'
  */
 const MODEL_ID = 'Xenova/segformer_b2_clothes'
 
+// The clothes parser has no separate class for outerwear — a jacket is just
+// "Upper-clothes" — so layers share the top's labels and are told apart by the
+// category the user picks.
 const CATEGORY_TO_LABELS: Record<Category, string[]> = {
   hat: ['Hat'],
   top: ['Upper-clothes', 'Dress'],
+  layer: ['Upper-clothes', 'Dress', 'Scarf'],
   bottom: ['Pants', 'Skirt', 'Belt'],
   shoes: ['Left-shoe', 'Right-shoe'],
 }

@@ -1,10 +1,14 @@
-export type Category = 'hat' | 'top' | 'bottom' | 'shoes'
+export type Category = 'hat' | 'top' | 'layer' | 'bottom' | 'shoes'
 
-export const CATEGORIES: Category[] = ['hat', 'top', 'bottom', 'shoes']
+export const CATEGORIES: Category[] = ['hat', 'top', 'layer', 'bottom', 'shoes']
+
+/** Slots a complete outfit must fill; hats and layers are optional extras. */
+export const CORE_CATEGORIES: Category[] = ['top', 'bottom', 'shoes']
 
 export const CATEGORY_LABELS: Record<Category, string> = {
   hat: 'hat',
   top: 'top',
+  layer: 'jacket',
   bottom: 'bottoms',
   shoes: 'shoes',
 }
@@ -12,6 +16,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
 export const CATEGORY_LABELS_PLURAL: Record<Category, string> = {
   hat: 'Hats',
   top: 'Tops',
+  layer: 'Outerwear',
   bottom: 'Bottoms',
   shoes: 'Shoes',
 }
@@ -19,6 +24,7 @@ export const CATEGORY_LABELS_PLURAL: Record<Category, string> = {
 export const CATEGORY_ICONS: Record<Category, string> = {
   hat: '🎩',
   top: '👕',
+  layer: '🧥',
   bottom: '👖',
   shoes: '👟',
 }
@@ -50,6 +56,8 @@ export interface WardrobeItem {
   formality: Formality
   image: Blob
   createdAt: number
+  /** In the laundry / packed away — hidden from the stylist until it's back. */
+  unavailable?: boolean
 }
 
 export interface Outfit {
@@ -57,4 +65,17 @@ export interface Outfit {
   name: string
   items: Partial<Record<Category, string>>
   createdAt: number
+}
+
+/**
+ * One day on the calendar: what's planned for it and whether it was actually
+ * worn. Wear counts and last-worn dates are derived from these, so there's a
+ * single source of truth for both planning and history.
+ */
+export interface DayPlan {
+  /** Local calendar date, `YYYY-MM-DD`. */
+  date: string
+  items: Partial<Record<Category, string>>
+  worn: boolean
+  updatedAt: number
 }

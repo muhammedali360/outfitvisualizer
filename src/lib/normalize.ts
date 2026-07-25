@@ -12,6 +12,7 @@ import { canvasToBlob, trimTransparent } from './image'
 const FRAME_ASPECT: Record<Category, number> = {
   hat: 1.25,
   top: 0.9,
+  layer: 0.95,
   bottom: 0.7,
   shoes: 1.4,
 }
