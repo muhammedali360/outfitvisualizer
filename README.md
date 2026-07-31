@@ -46,6 +46,16 @@ from your own closet.
   outfits, or whatever's in the studio. Once a day arrives, mark it worn — the
   wear log drives the "worn 3× · 5 days ago" line on every wardrobe card and
   the most/least-worn sorts.
+- **Gaps** — what the closet *can't* do yet. The headline is a count, not a
+  product: how many of your top × bottom pairings actually hold up. The usual
+  capsule-wardrobe sum (tops × bottoms × shoes × layers) assumes everything
+  goes with everything and treats swapping sneakers for loafers as a whole new
+  outfit, so nothing here multiplies. On top of that: the top or bottom that
+  would open up the most new pairings — skipping anything close to what you
+  already own, since otherwise the answer is forever "buy a black one" — plus
+  shoe and jacket coverage asked as a separate question, pieces that pair with
+  almost nothing, near-duplicates you already own, and your closet's makeup
+  against your own wear log.
 - **Stylist** — "what should I wear today?" Fetches your local forecast from
   Open-Meteo (free, no API key; asks for location permission), filters by how
   the day feels and the occasion (casual / work / dressy), and ranks the best
@@ -70,6 +80,12 @@ npm run dev      # http://localhost:5173
 
 `npm run build` type-checks and produces a production build in `dist/`.
 
+`npm run gapcheck` runs the closet-gap combinatorics check: synthetic closets
+go through the real pairing, clustering and recommendation code, pinning down
+that shoes never multiply the pairing count, that a piece near-identical to
+something you own is never recommended, and that colour clustering can't chain
+its way across the wheel.
+
 `npm run normcheck` runs the garment-normalization geometry check: synthetic
 tees and pants at assorted rotations, scales and lengths go through the real
 pipeline, and the results are measured off their pixels. It also writes
@@ -88,6 +104,13 @@ retuning the canonical frames in `src/lib/normalize.ts`.
   outfit cohesion checks that pieces sit at a similar formality and weight. An
   outer layer counts as extra warmth on top of the top/bottom average, scaled
   by how heavy it is.
+- The gap analysis ranks only tops and bottoms. They're the only categories
+  that can *create* a pairing; shoes and jackets finish ones you can already
+  make, and a neutral pair of shoes goes with every working combination, so
+  ranking them together would put a garnish above a course every time. What's
+  missing in those categories is asked separately, as coverage.
+- The 3:1 tops-per-bottom line is shown as a comparison, not a target — it's a
+  convention repeated by every stylist and demonstrated by none.
 - The clothes parser has no separate class for outerwear — a jacket is just
   "Upper-clothes" — so a layer is extracted with the same labels as a top and
   told apart by the category you pick.

@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "normcheck": "node dev/normcheck.mjs",
+    "gapcheck": "node dev/gapcheck.mjs",
     "pipecheck": "node dev/pipecheck.mjs"
   },
   "dependencies": {
