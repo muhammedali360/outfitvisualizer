@@ -9,6 +9,7 @@ import {
 } from '../types'
 import { cap, extractColors } from '../lib/colors'
 import { normalizeGarment } from '../lib/normalize'
+import { costPerWear, formatMoney, parsePrice } from '../lib/value'
 import { statFor, wearSummary, type WearStat } from '../lib/wear'
 
 /**
@@ -21,6 +22,7 @@ export default function EditItemModal({
   item,
   url,
   stats,
+  currency,
   onSave,
   onDelete,
   onClose,
@@ -28,6 +30,7 @@ export default function EditItemModal({
   item: WardrobeItem
   url?: string
   stats: Map<string, WearStat>
+  currency: string
   onSave: (item: WardrobeItem) => void | Promise<void>
   onDelete: (id: string) => void
   onClose: () => void
@@ -36,11 +39,13 @@ export default function EditItemModal({
   const [category, setCategory] = useState<Category>(item.category)
   const [warmth, setWarmth] = useState<Warmth>(item.warmth)
   const [formality, setFormality] = useState<Formality>(item.formality)
+  const [price, setPrice] = useState(item.price != null ? String(item.price) : '')
   const [unavailable, setUnavailable] = useState(!!item.unavailable)
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const stat = statFor(stats, item.id)
+  const cpw = costPerWear({ ...item, price: parsePrice(price) }, stat)
 
   async function save() {
     if (saving) return
@@ -64,6 +69,7 @@ export default function EditItemModal({
         category,
         warmth,
         formality,
+        price: parsePrice(price),
         unavailable,
         image,
         colors,
@@ -87,7 +93,10 @@ export default function EditItemModal({
         <div className="upload-body">
           <div className="upload-preview">
             <div className="preview-frame">{url && <img src={url} alt={item.name} />}</div>
-            <div className="sub">{wearSummary(stat)}</div>
+            <div className="sub">
+              {wearSummary(stat)}
+              {cpw !== null && ` · ${formatMoney(cpw, currency)} per wear`}
+            </div>
           </div>
 
           <div className="upload-form">
@@ -111,6 +120,15 @@ export default function EditItemModal({
               {category !== item.category && (
                 <span className="sub">Saving re-frames the cutout for its new slot.</span>
               )}
+            </div>
+            <div className="field">
+              <span className="label">What it cost ({currency})</span>
+              <input
+                inputMode="decimal"
+                value={price}
+                onChange={e => setPrice(e.target.value)}
+                placeholder="Optional — unlocks cost per wear"
+              />
             </div>
             <div className="field">
               <span className="label">Warmth</span>

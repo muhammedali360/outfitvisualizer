@@ -6,8 +6,11 @@ const APP_TAG = 'fit-check'
 
 interface BackupFile {
   app: typeof APP_TAG
-  /** 1 = items + outfits; 2 added the calendar/wear log and laundry state. */
-  version: 1 | 2
+  /**
+   * 1 = items + outfits; 2 added the calendar/wear log and laundry state;
+   * 3 added per-piece prices.
+   */
+  version: 1 | 2 | 3
   exportedAt: number
   items: Array<Omit<WardrobeItem, 'image'> & { image: string }>
   outfits: Outfit[]
@@ -25,7 +28,7 @@ export async function exportBackup(
 ): Promise<void> {
   const payload: BackupFile = {
     app: APP_TAG,
-    version: 2,
+    version: 3,
     exportedAt: Date.now(),
     items: await Promise.all(
       items.map(async i => ({ ...i, image: await blobToDataUrl(i.image) })),
@@ -80,6 +83,9 @@ export async function importBackup(
       image,
       createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : Date.now(),
       unavailable: raw.unavailable === true,
+      // Only in v3 backups, and optional even there — a missing price stays
+      // missing rather than becoming a zero.
+      price: typeof raw.price === 'number' && raw.price > 0 ? raw.price : undefined,
     })
   }
 

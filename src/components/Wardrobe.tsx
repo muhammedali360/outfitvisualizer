@@ -7,6 +7,7 @@ import {
   FORMALITY_LABELS,
   WARMTH_LABELS,
 } from '../types'
+import { costPerWear, formatMoney } from '../lib/value'
 import { statFor, wearSummary, type WearStat } from '../lib/wear'
 import EditItemModal from './EditItemModal'
 import UploadModal from './UploadModal'
@@ -26,6 +27,9 @@ export default function Wardrobe({
   items,
   urls,
   stats,
+  currency,
+  query,
+  onQueryChange,
   onAdd,
   onUpdate,
   onDelete,
@@ -35,6 +39,10 @@ export default function Wardrobe({
   items: WardrobeItem[]
   urls: Record<string, string>
   stats: Map<string, WearStat>
+  currency: string
+  /** Lifted so other tabs can send you here pointed at a particular piece. */
+  query: string
+  onQueryChange: (q: string) => void
   onAdd: (item: WardrobeItem) => Promise<void>
   onUpdate: (item: WardrobeItem) => Promise<void>
   onDelete: (id: string) => void
@@ -45,7 +53,6 @@ export default function Wardrobe({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null)
-  const [query, setQuery] = useState('')
   const [catFilter, setCatFilter] = useState<Category | 'all'>('all')
   const [availability, setAvailability] = useState<Availability>('all')
   const [sort, setSort] = useState<SortKey>('new')
@@ -145,7 +152,7 @@ export default function Wardrobe({
             className="search"
             type="search"
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={e => onQueryChange(e.target.value)}
             placeholder="Search by name or color…"
           />
           <div className="chip-row">
@@ -224,7 +231,7 @@ export default function Wardrobe({
           <button
             className="btn ghost"
             onClick={() => {
-              setQuery('')
+              onQueryChange('')
               setCatFilter('all')
               setAvailability('all')
             }}
@@ -281,7 +288,13 @@ export default function Wardrobe({
                         {WARMTH_LABELS[item.warmth]} · {FORMALITY_LABELS[item.formality]}
                       </span>
                     </div>
-                    <div className="item-wear">{wearSummary(stat)}</div>
+                    <div className="item-wear">
+                      {wearSummary(stat)}
+                      {(() => {
+                        const cpw = costPerWear(item, stat)
+                        return cpw === null ? null : ` · ${formatMoney(cpw, currency)}/wear`
+                      })()}
+                    </div>
                   </div>
                 )
               })}
@@ -296,7 +309,7 @@ export default function Wardrobe({
           <button
             className="linkish"
             onClick={() => {
-              setQuery('')
+              onQueryChange('')
               setCatFilter('all')
               setAvailability('all')
             }}
@@ -308,6 +321,7 @@ export default function Wardrobe({
 
       {adding && (
         <UploadModal
+          currency={currency}
           onClose={() => setAdding(false)}
           onSave={async item => {
             await onAdd(item)
@@ -321,6 +335,7 @@ export default function Wardrobe({
           item={editing}
           url={urls[editing.id]}
           stats={stats}
+          currency={currency}
           onClose={() => setEditingId(null)}
           onSave={async next => {
             await onUpdate(next)

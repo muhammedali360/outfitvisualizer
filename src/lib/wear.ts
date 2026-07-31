@@ -64,14 +64,22 @@ const EMPTY: WearStat = { count: 0, lastWorn: null }
 /**
  * Roll the wear log up per item. Only days marked `worn` count — a plan for
  * next Tuesday isn't history yet.
+ *
+ * A wear is one *day* an item was worn, so a piece can only score once per
+ * date however many slots it turns up in. Nothing in the app can file the same
+ * id under two categories, but a hand-edited backup can, and cost per wear
+ * divides by this number — a piece that quietly counted double would look
+ * half as expensive as it is.
  */
 export function wearStats(days: DayPlan[]): Map<string, WearStat> {
   const out = new Map<string, WearStat>()
   for (const day of days) {
     if (!day.worn) continue
+    const seen = new Set<string>()
     for (const cat of CATEGORIES) {
       const id = day.items[cat]
-      if (!id) continue
+      if (!id || seen.has(id)) continue
+      seen.add(id)
       const prev = out.get(id) ?? { count: 0, lastWorn: null }
       prev.count++
       if (!prev.lastWorn || day.date > prev.lastWorn) prev.lastWorn = day.date

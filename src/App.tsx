@@ -4,14 +4,16 @@ import { CATEGORIES } from './types'
 import * as db from './db'
 import { exportBackup, importBackup } from './lib/backup'
 import { targetWarmthForTemp } from './lib/suggest'
+import { loadCurrency, saveCurrency } from './lib/value'
 import { selectionIsEmpty, todayKey, wearStats } from './lib/wear'
 import { fetchForecast, type Forecast } from './lib/weather'
 import Wardrobe from './components/Wardrobe'
 import OutfitBuilder from './components/OutfitBuilder'
 import Planner from './components/Planner'
 import Suggestions from './components/Suggestions'
+import Insights from './components/Insights'
 
-type Tab = 'wardrobe' | 'studio' | 'plan' | 'stylist'
+type Tab = 'wardrobe' | 'studio' | 'plan' | 'stylist' | 'insights'
 type ForecastState = Forecast | 'loading' | 'error'
 type Selection = Partial<Record<Category, string>>
 
@@ -20,6 +22,7 @@ const TAB_TITLES: Record<Tab, string> = {
   studio: 'Outfit Studio',
   plan: 'Week',
   stylist: 'Stylist',
+  insights: 'Insights',
 }
 
 /** Tabs that need the forecast, and so trigger the geolocation prompt. */
@@ -33,6 +36,8 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('wardrobe')
   const [selection, setSelection] = useState<Selection>({})
   const [forecast, setForecast] = useState<ForecastState>('loading')
+  const [query, setQuery] = useState('')
+  const [currency, setCurrency] = useState(loadCurrency)
 
   async function loadAll() {
     const [its, ofs, dys] = await Promise.all([
@@ -157,6 +162,17 @@ export default function App() {
     await setDay(today, sel, true)
   }
 
+  function changeCurrency(code: string) {
+    saveCurrency(code)
+    setCurrency(code)
+  }
+
+  /** Jump to the wardrobe with the search box already narrowed to one piece. */
+  function findInWardrobe(name: string) {
+    setQuery(name)
+    setTab('wardrobe')
+  }
+
   function openInStudio(sel: Selection) {
     setSelection(sel)
     setTab('studio')
@@ -192,6 +208,9 @@ export default function App() {
             items={items}
             urls={urls}
             stats={stats}
+            currency={currency}
+            query={query}
+            onQueryChange={setQuery}
             onAdd={addItem}
             onUpdate={updateItem}
             onDelete={removeItem}
@@ -236,6 +255,18 @@ export default function App() {
             urls={urls}
             weather={forecast === 'loading' ? 'loading' : forecast === 'error' ? 'error' : forecast.today}
             onWear={openInStudio}
+            onGoWardrobe={() => setTab('wardrobe')}
+          />
+        )}
+        {tab === 'insights' && (
+          <Insights
+            items={items}
+            urls={urls}
+            stats={stats}
+            currency={currency}
+            onCurrencyChange={changeCurrency}
+            todayWarmth={live ? targetWarmthForTemp(live.today.tempC) : null}
+            onFindInWardrobe={findInWardrobe}
             onGoWardrobe={() => setTab('wardrobe')}
           />
         )}
