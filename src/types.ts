@@ -58,6 +58,12 @@ export interface WardrobeItem {
   createdAt: number
   /** In the laundry / packed away — hidden from the stylist until it's back. */
   unavailable?: boolean
+  /**
+   * What it cost, in whole currency units. Optional throughout: cost per wear
+   * and closet value simply leave unpriced pieces out rather than assuming a
+   * zero, which would make every untagged piece look like a bargain.
+   */
+  price?: number
 }
 
 export interface Outfit {

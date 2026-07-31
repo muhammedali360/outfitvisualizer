@@ -1,0 +1,232 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>valuecheck</title></head>
+  <body>
+    <pre id="out">running…</pre>
+    <script type="module">
+      import {
+        closetValue,
+        costPerWear,
+        costPerWearRanking,
+        declutterReview,
+        humanDays,
+        parsePrice,
+        utilization,
+        wearConcentration,
+        wearsToCostPerWear,
+        wearsToTarget,
+      } from '/src/lib/value.ts'
+      import { dateKey, wearStats } from '/src/lib/wear.ts'
+
+      const results = []
+      const fail = []
+      function check(name, ok, detail = '') {
+        results.push(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`)
+        if (!ok) fail.push(name)
+      }
+
+      const DAY = 86_400_000
+      const now = Date.now()
+      const ago = n => dateKey(new Date(now - n * DAY))
+
+      let seq = 0
+      function item(over = {}) {
+        return {
+          id: `i${++seq}`,
+          name: `piece ${seq}`,
+          category: 'top',
+          colors: ['#000000'],
+          colorNames: ['black'],
+          warmth: 2,
+          formality: 1,
+          image: new Blob(),
+          createdAt: now - 400 * DAY,
+          ...over,
+        }
+      }
+      /** A day record putting `ids` (category-keyed) on the calendar, marked worn. */
+      function day(date, items, worn = true) {
+        return { date, items, worn, updatedAt: now }
+      }
+
+      // ---- parsePrice: blank is "no price", not zero
+      check('parsePrice blank → undefined', parsePrice('') === undefined)
+      check('parsePrice "0" → undefined', parsePrice('0') === undefined, String(parsePrice('0')))
+      check('parsePrice strips symbols', parsePrice('$42.50') === 42.5, String(parsePrice('$42.50')))
+      check('parsePrice junk → undefined', parsePrice('abc') === undefined)
+
+      // ---- cost per wear
+      const tee = item({ price: 60 })
+      const stats5 = wearStats([
+        day(ago(1), { top: tee.id }),
+        day(ago(2), { top: tee.id }),
+        day(ago(3), { top: tee.id }),
+        day(ago(4), { top: tee.id }),
+        day(ago(5), { top: tee.id }),
+      ])
+      check('cpw = price / wears', costPerWear(tee, stats5.get(tee.id)) === 12,
+        String(costPerWear(tee, stats5.get(tee.id))))
+      check('cpw is null with no price',
+        costPerWear(item(), stats5.get(tee.id)) === null)
+      check('cpw is null when never worn — not infinity',
+        costPerWear(tee, { count: 0, lastWorn: null }) === null)
+
+      // A wear is a day, not a slot. Nothing in the app files one id under two
+      // categories, but a hand-edited backup can, and cost per wear divides by
+      // this count — double-counting would halve the apparent price.
+      const dupe = wearStats([day(ago(1), { top: tee.id, layer: tee.id })])
+      check('one item in two slots of a day counts once',
+        dupe.get(tee.id).count === 1, `count ${dupe.get(tee.id).count}`)
+
+      // Planned-but-not-worn days are not wears.
+      const planned = wearStats([day(ago(1), { top: tee.id }, false)])
+      check('unworn plan is not a wear', planned.get(tee.id) === undefined)
+
+      check('wearsToTarget counts down from 30', wearsToTarget({ count: 5, lastWorn: null }) === 25)
+      check('wearsToTarget floors at 0', wearsToTarget({ count: 44, lastWorn: null }) === 0)
+      check('wearsToCostPerWear: £60 at 5 wears needs 7 more to reach £5',
+        wearsToCostPerWear(tee, { count: 5, lastWorn: null }, 5) === 7,
+        String(wearsToCostPerWear(tee, { count: 5, lastWorn: null }, 5)))
+
+      // ---- closet value: unpriced pieces sit out rather than counting as free
+      const priced = [item({ price: 100 }), item({ price: 50 })]
+      const mixed = [...priced, item(), item()]
+      const vStats = wearStats([
+        day(ago(1), { top: priced[0].id }),
+        day(ago(2), { top: priced[0].id }),
+        day(ago(3), { top: priced[1].id }),
+      ])
+      const v = closetValue(mixed, vStats)
+      check('closet value sums priced only', v.total === 150, String(v.total))
+      check('closet value counts priced', v.priced === 2, String(v.priced))
+      check('closet value counts unpriced', v.unpriced === 2, String(v.unpriced))
+      check('blended cpw = spend / wears', v.blendedCostPerWear === 50, String(v.blendedCostPerWear))
+      check('blended cpw null with no wears', closetValue(priced, new Map()).blendedCostPerWear === null)
+
+      // ---- utilization
+      const old = item({ createdAt: now - 400 * DAY })
+      const alsoOld = item({ createdAt: now - 400 * DAY })
+      const stale = item({ createdAt: now - 400 * DAY })
+      const fresh = item({ createdAt: now - 3 * DAY })
+      const uStats = wearStats([
+        day(ago(10), { top: old.id }),
+        day(ago(500), { top: stale.id }),
+        day(ago(1), { top: fresh.id }),
+      ])
+      const u = utilization([old, alsoOld, stale, fresh], uStats)
+      check('brand-new pieces sit out of utilization', u.tooNew === 1, `tooNew ${u.tooNew}`)
+      check('utilization eligible excludes the new one', u.eligible === 3, `eligible ${u.eligible}`)
+      check('worn 500 days ago is outside the year window', u.worn === 1, `worn ${u.worn}`)
+      check('utilization rate', Math.abs(u.rate - 1 / 3) < 1e-9, String(u.rate))
+      check('utilization rate null with nothing eligible',
+        utilization([fresh], uStats).rate === null)
+
+      // ---- concentration: measured, and it must be able to disagree with 80/20
+      const even = Array.from({ length: 10 }, () => item())
+      const evenDays = []
+      even.forEach((it, n) => {
+        for (let k = 0; k < 5; k++) evenDays.push(day(ago(n * 10 + k + 1), { top: it.id }))
+      })
+      const evenConc = wearConcentration(even, wearStats(evenDays))
+      check('even wearing → top fifth holds a fifth of wears',
+        Math.abs(evenConc.share - 0.2) < 1e-9, String(evenConc.share))
+      check('top fifth of 10 is 2 pieces', evenConc.topCount === 2, String(evenConc.topCount))
+
+      const lopsided = Array.from({ length: 10 }, () => item())
+      const lopDays = []
+      for (let k = 0; k < 40; k++) lopDays.push(day(ago(k + 1), { top: lopsided[0].id }))
+      for (let k = 0; k < 40; k++) lopDays.push(day(ago(k + 1), { bottom: lopsided[1].id }))
+      lopsided.slice(2).forEach((it, n) => lopDays.push(day(ago(200 + n), { top: it.id })))
+      const lopConc = wearConcentration(lopsided, wearStats(lopDays))
+      check('lopsided wearing pushes the share up',
+        lopConc.share > 0.9, String(lopConc.share))
+      check('concentration null with no wears', wearConcentration(even, new Map()) === null)
+      check('concentration null for a tiny closet', wearConcentration([tee], stats5) === null)
+
+      // ---- cpw ranking is per category, so a coat never loses to a t-shirt
+      const cheapTop = item({ category: 'top', price: 20 })
+      const dearTop = item({ category: 'top', price: 200 })
+      const coat = item({ category: 'layer', price: 400 })
+      const rStats = wearStats([
+        ...Array.from({ length: 10 }, (_, k) => day(ago(k + 1), { top: cheapTop.id })),
+        ...Array.from({ length: 10 }, (_, k) => day(ago(k + 20), { top: dearTop.id })),
+        ...Array.from({ length: 10 }, (_, k) => day(ago(k + 40), { layer: coat.id })),
+      ])
+      const ranking = costPerWearRanking([cheapTop, dearTop, coat], rStats)
+      const byId = Object.fromEntries(ranking.map(r => [r.item.id, r]))
+      check('cheap top ranks 1st of 2 tops',
+        byId[cheapTop.id].rank === 1 && byId[cheapTop.id].of === 2,
+        `${byId[cheapTop.id].rank} of ${byId[cheapTop.id].of}`)
+      check('dear top ranks 2nd of 2 tops', byId[dearTop.id].rank === 2)
+      check('the coat is ranked against coats, not tees — 1st of 1',
+        byId[coat.id].rank === 1 && byId[coat.id].of === 1,
+        `${byId[coat.id].rank} of ${byId[coat.id].of}`)
+      check('unpriced and unworn pieces are left out of the ranking',
+        costPerWearRanking([item(), item({ price: 10 })], new Map()).length === 0)
+
+      // ---- declutter
+      const neverWornOld = item({ createdAt: now - 200 * DAY })
+      const neverWornNew = item({ createdAt: now - 10 * DAY })
+      const wornRecently = item({ createdAt: now - 400 * DAY })
+      const wornLongAgo = item({ createdAt: now - 800 * DAY })
+      const dStats = wearStats([
+        day(ago(3), { top: wornRecently.id }),
+        day(ago(400), { top: wornLongAgo.id }),
+      ])
+      const review = declutterReview(
+        [neverWornOld, neverWornNew, wornRecently, wornLongAgo],
+        dStats,
+        null,
+      )
+      const flagged = review.candidates.map(c => c.item.id)
+      check('never worn and long owned is flagged', flagged.includes(neverWornOld.id))
+      check('never worn but bought last week is not flagged', !flagged.includes(neverWornNew.id))
+      check('worn last week is not flagged', !flagged.includes(wornRecently.id))
+      check('worn over a year ago is flagged', flagged.includes(wornLongAgo.id))
+      check('never-worn sorts above stale', review.candidates[0].item.id === neverWornOld.id,
+        review.candidates[0].item.id)
+      check('idleDays is measured from last wear', review.candidates[1].idleDays === 400,
+        String(review.candidates[1].idleDays))
+
+      // The season guard: a heavy coat idle through a hot spell is behaving
+      // normally, and shouldn't be put on the chopping block for it.
+      const parka = item({ category: 'layer', warmth: 3, createdAt: now - 800 * DAY })
+      const summerTee = item({ category: 'top', warmth: 1, createdAt: now - 800 * DAY })
+      const heldBack = declutterReview([parka, summerTee], new Map(), 1)
+      check('heavy coat is held back on a hot day',
+        !heldBack.candidates.some(c => c.item.id === parka.id) && heldBack.offSeason === 1,
+        `offSeason ${heldBack.offSeason}`)
+      check('light tee is still flagged on a hot day',
+        heldBack.candidates.some(c => c.item.id === summerTee.id))
+      const winter = declutterReview([parka, summerTee], new Map(), 3)
+      check('the guard flips when the weather does',
+        winter.candidates.some(c => c.item.id === parka.id) &&
+          !winter.candidates.some(c => c.item.id === summerTee.id),
+        `offSeason ${winter.offSeason}`)
+      check('with no forecast nothing is held back',
+        declutterReview([parka, summerTee], new Map(), null).offSeason === 0)
+      // Shoes and hats carry no seasonal weight, so the guard must not hide them.
+      const bootsOff = declutterReview(
+        [item({ category: 'shoes', warmth: 3, createdAt: now - 800 * DAY })],
+        new Map(),
+        1,
+      )
+      check('shoes are never held back as off-season', bootsOff.candidates.length === 1)
+
+      check('sunkCost carries the price through',
+        declutterReview([item({ price: 99, createdAt: now - 800 * DAY })], new Map(), null)
+          .candidates[0].sunkCost === 99)
+
+      // ---- copy helpers
+      check('humanDays days', humanDays(12) === '12 days', humanDays(12))
+      check('humanDays singular day', humanDays(1) === '1 day', humanDays(1))
+      check('humanDays months', humanDays(200) === '7 months', humanDays(200))
+      check('humanDays years', humanDays(800) === '2 years', humanDays(800))
+
+      document.getElementById('out').textContent =
+        results.join('\n') + `\n\n${fail.length ? 'FAILURES: ' + fail.length : 'ALL PASS'}`
+      window.__done = true
+      window.__fail = fail.length
+    </script>
+  </body>
+</html>

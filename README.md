@@ -46,6 +46,19 @@ from your own closet.
   outfits, or whatever's in the studio. Once a day arrives, mark it worn — the
   wear log drives the "worn 3× · 5 days ago" line on every wardrobe card and
   the most/least-worn sorts.
+- **Insights** — what the closet actually costs. Record what a piece cost (a
+  field on every piece, always optional) and it starts reporting **cost per
+  wear** — price divided by the days you logged it — ranked *within its
+  category*, because a coat is always going to look dear next to a t-shirt and
+  ranking across the whole closet would just sort by category. Alongside it:
+  closet value, blended cost per wear, the share of the closet worn in the last
+  year (next to WRAP's 74% figure for UK wardrobes), and a **measured** wear
+  concentration — your busiest fifth against your own log, rather than the
+  unsourced "you wear 20% of your wardrobe 80% of the time". Pieces with no
+  price still get a #30Wears progress bar, which needs no money at all. The
+  "worth a second look" list is the reverse-hanger trick without the hangers:
+  never worn in the three months you've owned it, or unworn for six — and
+  season-aware, so a parka idle through July is held back rather than accused.
 - **Stylist** — "what should I wear today?" Fetches your local forecast from
   Open-Meteo (free, no API key; asks for location permission), filters by how
   the day feels and the occasion (casual / work / dressy), and ranks the best
@@ -70,6 +83,12 @@ npm run dev      # http://localhost:5173
 
 `npm run build` type-checks and produces a production build in `dist/`.
 
+`npm run valuecheck` runs the closet-stats arithmetic check: synthetic closets
+and wear logs go through the real cost-per-wear, utilization, concentration and
+declutter code, pinning down the judgement calls (a never-worn piece has *no*
+cost per wear rather than an infinite one; a piece bought last week isn't
+"unworn"; a parka idle in a heatwave isn't a declutter candidate).
+
 `npm run normcheck` runs the garment-normalization geometry check: synthetic
 tees and pants at assorted rotations, scales and lengths go through the real
 pipeline, and the results are measured off their pixels. It also writes
@@ -93,4 +112,10 @@ retuning the canonical frames in `src/lib/normalize.ts`.
   told apart by the category you pick.
 - Wear counts and last-worn dates aren't stored on the garment; they're derived
   from the day records, so the calendar and your wear history can never drift
-  apart.
+  apart. A wear is one *day*, so a piece counts once per date no matter how
+  many slots it turns up in — cost per wear divides by that number, and a piece
+  that quietly counted double would look half as expensive as it is.
+- Prices are optional everywhere and unpriced pieces are *excluded* from the
+  money stats rather than counted as zero, which would put every untagged piece
+  at the top of the "best value" list. Backups are now v3 and carry prices;
+  v1 and v2 files still restore.

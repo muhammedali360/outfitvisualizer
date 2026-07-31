@@ -14,6 +14,7 @@ import { cropBlob, type CropRect } from '../lib/image'
 import { refineMatte } from '../lib/matte'
 import { normalizeGarment } from '../lib/normalize'
 import { detectPose, garmentTilt, poseAnchor, type PoseResult } from '../lib/pose'
+import { parsePrice } from '../lib/value'
 import CropSelector from './CropSelector'
 
 type Stage = 'pick' | 'crop' | 'edit'
@@ -21,9 +22,11 @@ type Status = 'processing' | 'cutout' | 'original'
 type Method = 'smart' | 'bg' | null
 
 export default function UploadModal({
+  currency,
   onSave,
   onClose,
 }: {
+  currency: string
   onSave: (item: WardrobeItem) => void | Promise<void>
   onClose: () => void
 }) {
@@ -48,6 +51,7 @@ export default function UploadModal({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [warmth, setWarmth] = useState<Warmth>(2)
   const [formality, setFormality] = useState<Formality>(1)
+  const [price, setPrice] = useState('')
   const [saving, setSaving] = useState(false)
   const jobRef = useRef(0)
   const segCacheRef = useRef<{
@@ -298,6 +302,7 @@ export default function UploadModal({
         colorNames: colors.map(c => c.name),
         warmth,
         formality,
+        price: parsePrice(price),
         image: activeBlob,
         createdAt: Date.now(),
       })
@@ -437,6 +442,15 @@ export default function UploadModal({
                       ? `${cap(primaryColor)} ${CATEGORY_LABELS[category]}`
                       : 'e.g. Favorite tee'
                   }
+                />
+              </div>
+              <div className="field">
+                <span className="label">What it cost ({currency})</span>
+                <input
+                  inputMode="decimal"
+                  value={price}
+                  onChange={e => setPrice(e.target.value)}
+                  placeholder="Optional — unlocks cost per wear"
                 />
               </div>
               <div className="field">
