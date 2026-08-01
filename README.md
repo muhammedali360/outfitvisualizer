@@ -46,6 +46,16 @@ from your own closet.
   outfits, or whatever's in the studio. Once a day arrives, mark it worn — the
   wear log drives the "worn 3× · 5 days ago" line on every wardrobe card and
   the most/least-worn sorts.
+- **Pack** — build a suitcase out of the closet you already own. Give it a
+  destination (Open-Meteo's geocoder, free and keyless) and some dates, and it
+  fetches the forecast *there* and packs against it. The premise every packing
+  guide agrees on is that you pack for **combinations, not for days**, so it
+  doesn't pick an outfit per day and add them up — it grows a case one piece at
+  a time, always taking whichever top or pair of bottoms adds the most working
+  combinations, and preferring on a tie the one that goes with *everything*
+  already in the case. Then it deals those combinations across the days, best
+  fit for each day's weather, never repeating while a fresh one is left. Tick
+  pieces off as they go in; "Copy list" puts the whole thing on the clipboard.
 - **Stylist** — "what should I wear today?" Fetches your local forecast from
   Open-Meteo (free, no API key; asks for location permission), filters by how
   the day feels and the occasion (casual / work / dressy), and ranks the best
@@ -53,7 +63,9 @@ from your own closet.
   a jacket on, and on a warm one that you're carrying too much.
 
 All data (images included) is stored locally in IndexedDB — nothing leaves your
-machine except the anonymous weather request.
+machine except the anonymous weather request, and the destination lookup if you
+plan a trip (which tells Open-Meteo a city name, rather less than the browser's
+own geolocation tells it).
 
 - **Backup / portability** — "Export backup" in the wardrobe downloads the
   whole closet (garment images, tags, saved outfits, laundry state and the
@@ -69,6 +81,12 @@ npm run dev      # http://localhost:5173
 ```
 
 `npm run build` type-checks and produces a production build in `dist/`.
+
+`npm run packcheck` runs the packing-selection check: synthetic closets and
+forecasts go through the real trip planner, asserting that the case comes out
+smaller than a change of clothes per day, that a trip swinging from 28°C to
+1°C carries both ends rather than the average, that a cold trip doesn't leave
+the warm jacket behind, and that nothing in the wash ends up in the case.
 
 `npm run normcheck` runs the garment-normalization geometry check: synthetic
 tees and pants at assorted rotations, scales and lengths go through the real
@@ -88,6 +106,13 @@ retuning the canonical frames in `src/lib/normalize.ts`.
   outfit cohesion checks that pieces sit at a similar formality and weight. An
   outer layer counts as extra warmth on top of the top/bottom average, scaled
   by how heavy it is.
+- The packing planner never multiplies by shoes. Swapping trainers for loafers
+  isn't a new outfit, and counting it as one is what makes published capsule
+  numbers look three to five times better than they are; shoes and jackets are
+  packed for coverage instead.
+- Trips live in localStorage rather than IndexedDB — one working document, not
+  a record worth backing up — and the plan is recomputed from the closet every
+  time, so it can't go stale against a wardrobe that's moved on.
 - The clothes parser has no separate class for outerwear — a jacket is just
   "Upper-clothes" — so a layer is extracted with the same labels as a top and
   told apart by the category you pick.

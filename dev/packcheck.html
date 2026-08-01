@@ -1,0 +1,233 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>packcheck</title></head>
+  <body>
+    <pre id="out">running…</pre>
+    <script type="module">
+      import { outfitsNeeded, packingListText, planTrip } from '/src/lib/trip.ts'
+      import { dayRange, todayKey } from '/src/lib/wear.ts'
+
+      const results = []
+      const fail = []
+      function check(name, ok, detail = '') {
+        results.push(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`)
+        if (!ok) fail.push(name)
+      }
+
+      let seq = 0
+      function item(category, hex, colorName, over = {}) {
+        return {
+          id: `i${++seq}`,
+          name: `${colorName} ${category} ${seq}`,
+          category,
+          colors: [hex],
+          colorNames: [colorName],
+          warmth: 2,
+          formality: 1,
+          image: new Blob(),
+          createdAt: 0,
+          ...over,
+        }
+      }
+      const BLACK = ['#1a1a1a', 'black']
+      const WHITE = ['#f2f0ec', 'white']
+      const NAVY = ['#26324f', 'navy']
+      const GRAY = ['#8a8a8a', 'gray']
+      const BEIGE = ['#d3bd97', 'beige']
+      const RED = ['#c0392b', 'red']
+      const GREEN = ['#4a8c56', 'green']
+      const top = (c, over) => item('top', c[0], c[1], over)
+      const bottom = (c, over) => item('bottom', c[0], c[1], over)
+      const shoe = (c, over) => item('shoes', c[0], c[1], over)
+      const layer = (c, over) => item('layer', c[0], c[1], over)
+
+      const today = todayKey()
+      const spec = (over = {}) => ({
+        days: dayRange(today, 5),
+        forecast: new Map(),
+        fallbackWarmth: 2,
+        occasion: null,
+        laundry: false,
+        ...over,
+      })
+      /** A forecast map holding the same temperature every day of the trip. */
+      const flat = (days, tempC, precipProb = 0) =>
+        new Map(days.map(d => [d, { date: d, tempC, precipProb, desc: 'Clear', emoji: '☀️' }]))
+
+      // ---- how many outfits a trip actually calls for
+      check('a 5-day trip needs 5 outfits', outfitsNeeded(5, false) === 5)
+      check('doing a wash caps a 14-day trip at a week', outfitsNeeded(14, true) === 7,
+        String(outfitsNeeded(14, true)))
+      check('a wash does not inflate a short trip', outfitsNeeded(3, true) === 3)
+      check('a trip always needs at least one outfit', outfitsNeeded(0, false) === 1)
+
+      // ---- packing for combinations, not for days
+      // Nine neutral pieces cover a 5-day trip out of far fewer than 5 outfits'
+      // worth of clothes — that's the entire premise.
+      const neutrals = [
+        top(BLACK), top(WHITE), top(GRAY), top(NAVY), top(BEIGE),
+        bottom(BLACK), bottom(NAVY), bottom(GRAY), bottom(BEIGE),
+        shoe(BLACK), shoe(WHITE),
+      ]
+      const p5 = planTrip(neutrals, spec())
+      check('a plan comes back', !!p5)
+      const cores = p5.picks.filter(i => i.category === 'top' || i.category === 'bottom')
+      check('packs fewer core pieces than the trip has days',
+        cores.length < 5 + 5, `${cores.length} core pieces for 5 days`)
+      check('covers the trip', p5.combinations >= p5.needed,
+        `${p5.combinations} combinations for ${p5.needed} needed`)
+      check('all neutrals means everything mixes', p5.fullyMixable)
+      check('one plan entry per day', p5.days.length === 5, String(p5.days.length))
+      check('every day gets a top and a bottom',
+        p5.days.every(d => d.items.some(i => i.category === 'top') &&
+          d.items.some(i => i.category === 'bottom')))
+      check('the plan only ever wears what was packed',
+        p5.days.every(d => d.items.every(i => p5.picks.includes(i))))
+
+      // Days must not repeat a combination while a fresh one is available.
+      const sig = d => [...d.items].map(i => i.id).sort().join('|')
+      const sigs = p5.days.map(sig)
+      check('no combination is repeated while fresh ones remain',
+        new Set(sigs).size === sigs.length, `${new Set(sigs).size} distinct of ${sigs.length}`)
+
+      // ---- the 54321 piece budgets
+      const huge = []
+      for (let i = 0; i < 30; i++) huge.push(top(BLACK))
+      for (let i = 0; i < 30; i++) huge.push(bottom(WHITE))
+      for (let i = 0; i < 10; i++) huge.push(shoe(GRAY))
+      const pHuge = planTrip(huge, spec({ days: dayRange(today, 25) }))
+      check('never packs more than 5 tops',
+        pHuge.picks.filter(i => i.category === 'top').length <= 5,
+        String(pHuge.picks.filter(i => i.category === 'top').length))
+      check('never packs more than 4 bottoms',
+        pHuge.picks.filter(i => i.category === 'bottom').length <= 4,
+        String(pHuge.picks.filter(i => i.category === 'bottom').length))
+      check('never packs more than 3 pairs of shoes',
+        pHuge.picks.filter(i => i.category === 'shoes').length <= 3,
+        String(pHuge.picks.filter(i => i.category === 'shoes').length))
+      check('a 25-day trip still gets 25 days planned', pHuge.days.length === 25)
+      check('says so when the case falls short of the trip',
+        pHuge.notes.some(n => n.includes('short of')), pHuge.notes.join(' | '))
+
+      // ---- laundry
+      const long = spec({ days: dayRange(today, 14) })
+      const noWash = planTrip(neutrals, long)
+      const wash = planTrip(neutrals, { ...long, laundry: true })
+      check('a wash never asks for more combinations than no wash',
+        wash.needed <= noWash.needed, `${wash.needed} vs ${noWash.needed}`)
+      check('a wash mentions itself in the notes',
+        wash.notes.some(n => n.includes('wash')), wash.notes.join(' | '))
+
+      // ---- weather drives what goes in
+      const mixedWeight = [
+        top(BLACK, { warmth: 1 }), top(WHITE, { warmth: 1 }),
+        top(NAVY, { warmth: 3 }), top(GRAY, { warmth: 3 }),
+        bottom(BLACK, { warmth: 1 }), bottom(NAVY, { warmth: 3 }),
+        shoe(BLACK),
+        layer(NAVY, { warmth: 3 }), layer(GRAY, { warmth: 1 }),
+      ]
+      const hotDays = dayRange(today, 4)
+      const hot = planTrip(mixedWeight, spec({ days: hotDays, forecast: flat(hotDays, 28) }))
+      check('a hot trip packs no heavy pieces',
+        hot.picks.every(i => i.category === 'shoes' || i.warmth <= 2),
+        hot.picks.map(i => `${i.name}:${i.warmth}`).join(', '))
+      check('a hot trip packs no jacket',
+        hot.picks.every(i => i.category !== 'layer'),
+        hot.picks.map(i => i.category).join(', '))
+
+      const coldDays = dayRange(today, 4)
+      const cold = planTrip(mixedWeight, spec({ days: coldDays, forecast: flat(coldDays, -2) }))
+      check('a cold trip packs a jacket',
+        cold.picks.some(i => i.category === 'layer'),
+        cold.picks.map(i => i.category).join(', '))
+      check('the jacket packed for the cold is a warm one',
+        cold.picks.filter(i => i.category === 'layer').some(i => i.warmth === 3),
+        cold.picks.filter(i => i.category === 'layer').map(i => `${i.name}:${i.warmth}`).join(', '))
+      check('a cold trip packs no featherweight tops',
+        cold.picks.filter(i => i.category === 'top').every(i => i.warmth >= 2),
+        cold.picks.filter(i => i.category === 'top').map(i => i.warmth).join(', '))
+
+      // A trip that swings hot to cold has to carry both, not the average.
+      const swingDays = dayRange(today, 4)
+      const swing = new Map([
+        [swingDays[0], { date: swingDays[0], tempC: 28, precipProb: 0, desc: 'Clear', emoji: '☀️' }],
+        [swingDays[1], { date: swingDays[1], tempC: 27, precipProb: 0, desc: 'Clear', emoji: '☀️' }],
+        [swingDays[2], { date: swingDays[2], tempC: 2, precipProb: 0, desc: 'Clear', emoji: '☀️' }],
+        [swingDays[3], { date: swingDays[3], tempC: 1, precipProb: 0, desc: 'Clear', emoji: '☀️' }],
+      ])
+      const swung = planTrip(mixedWeight, spec({ days: swingDays, forecast: swing }))
+      check('a trip that swings packs for both ends, not the average',
+        swung.picks.some(i => i.warmth === 1) && swung.picks.some(i => i.warmth === 3),
+        swung.picks.map(i => `${i.name}:${i.warmth}`).join(', '))
+      check('the jacket is only worn on the cold days',
+        swung.days.slice(0, 2).every(d => !d.items.some(i => i.category === 'layer')),
+        swung.days.map(d => d.items.some(i => i.category === 'layer') ? 'coat' : '-').join(' '))
+
+      // ---- rain
+      const rainy = dayRange(today, 3)
+      const withHat = [...neutrals, item('hat', ...BLACK)]
+      const dry = planTrip(withHat, spec({ days: rainy, forecast: flat(rainy, 18, 5) }))
+      const wet = planTrip(withHat, spec({ days: rainy, forecast: flat(rainy, 18, 90) }))
+      check('no hat packed for a dry trip', dry.picks.every(i => i.category !== 'hat'))
+      check('a hat is packed when rain is forecast',
+        wet.picks.some(i => i.category === 'hat'), wet.picks.map(i => i.category).join(', '))
+
+      // ---- occasion narrows the case
+      const mixedFormality = [
+        top(BLACK, { formality: 1 }), top(WHITE, { formality: 1 }),
+        top(NAVY, { formality: 3 }), top(GRAY, { formality: 3 }),
+        bottom(BLACK, { formality: 1 }), bottom(NAVY, { formality: 3 }),
+        shoe(BLACK, { formality: 1 }), shoe(NAVY, { formality: 3 }),
+      ]
+      const dressy = planTrip(mixedFormality, spec({ occasion: 3 }))
+      check('a dressy trip packs nothing fully casual',
+        dressy.picks.every(i => i.formality >= 2),
+        dressy.picks.map(i => `${i.name}:${i.formality}`).join(', '))
+
+      // ---- the laundry basket
+      const withDirty = [...neutrals.slice(0, 4).map(i => ({ ...i, unavailable: true })), ...neutrals.slice(4)]
+      const clean = planTrip(withDirty, spec())
+      check('nothing in the wash gets packed',
+        clean.picks.every(i => !i.unavailable), clean.picks.filter(i => i.unavailable).length + ' dirty')
+
+      // ---- degenerate closets
+      check('no bottoms means no plan',
+        planTrip([top(BLACK), top(WHITE), shoe(BLACK)], spec()) === null)
+      check('no tops means no plan', planTrip([bottom(BLACK), shoe(BLACK)], spec()) === null)
+      const bare = planTrip([top(BLACK), bottom(WHITE)], spec())
+      check('one top and one bottom still plans every day',
+        bare && bare.days.length === 5 && bare.combinations === 1,
+        bare ? `${bare.combinations} combos, ${bare.days.length} days` : 'null')
+      check('a one-combination case repeats rather than failing',
+        new Set(bare.days.map(sig)).size === 1)
+
+      // Clashing pieces can't be counted as a working combination.
+      const clashing = [top(RED), top(GREEN), bottom(RED), bottom(GREEN)]
+      const clash = planTrip(clashing, spec())
+      check('clashing pieces are not counted as combinations',
+        clash.combinations < 4, `${clash.combinations} of 4 possible`)
+      check('a two-item case does not claim everything mixes',
+        !clash.fullyMixable, clash.notes.join(' | '))
+      check('a wardrobe that will not mix is named as the reason, not a full case',
+        clash.notes.some(n => n.includes("doesn't mix")), clash.notes.join(' | '))
+      // A case genuinely limited by the piece budget must NOT blame the closet.
+      check('a case stopped by the budget blames the budget, not the closet',
+        !pHuge.notes.some(n => n.includes("doesn't mix")), pHuge.notes.join(' | '))
+      check('a one-combination case does not claim everything mixes',
+        !bare.fullyMixable, bare.notes.join(' | '))
+
+      // ---- the exported list
+      const text = packingListText(p5, 'Lisbon')
+      check('the copied list names every packed piece',
+        p5.picks.every(i => text.includes(i.name)))
+      check('the copied list has a checkbox per piece',
+        (text.match(/\[ \]/g) || []).length === p5.picks.length,
+        `${(text.match(/\[ \]/g) || []).length} vs ${p5.picks.length}`)
+
+      document.getElementById('out').textContent =
+        results.join('\n') + `\n\n${fail.length ? 'FAILURES: ' + fail.length : 'ALL PASS'}`
+      window.__done = true
+      window.__fail = fail.length
+    </script>
+  </body>
+</html>

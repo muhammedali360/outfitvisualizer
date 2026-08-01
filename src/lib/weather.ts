@@ -44,7 +44,8 @@ const WMO: Array<[number, string, string]> = [
   [99, 'Thunderstorm', '⛈️'],
 ]
 
-function describe(code: number): [string, string] {
+/** WMO weather code to a short description and an emoji. */
+export function describeWeather(code: number): [string, string] {
   const hit = WMO.find(([c]) => c === code)
   return hit ? [hit[1], hit[2]] : ['Mixed weather', '🌥️']
 }
@@ -76,7 +77,7 @@ export async function fetchForecast(): Promise<Forecast | null> {
     for (let i = 0; i < dates.length; i++) {
       const temp = data.daily.temperature_2m_max?.[i]
       if (typeof dates[i] !== 'string' || typeof temp !== 'number') continue
-      const [desc, emoji] = describe(data.daily.weather_code?.[i])
+      const [desc, emoji] = describeWeather(data.daily.weather_code?.[i])
       days.push({
         date: dates[i] as string,
         tempC: Math.round(temp),

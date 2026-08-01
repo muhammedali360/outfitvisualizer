@@ -10,8 +10,9 @@ import Wardrobe from './components/Wardrobe'
 import OutfitBuilder from './components/OutfitBuilder'
 import Planner from './components/Planner'
 import Suggestions from './components/Suggestions'
+import Trip from './components/Trip'
 
-type Tab = 'wardrobe' | 'studio' | 'plan' | 'stylist'
+type Tab = 'wardrobe' | 'studio' | 'plan' | 'stylist' | 'trip'
 type ForecastState = Forecast | 'loading' | 'error'
 type Selection = Partial<Record<Category, string>>
 
@@ -20,6 +21,7 @@ const TAB_TITLES: Record<Tab, string> = {
   studio: 'Outfit Studio',
   plan: 'Week',
   stylist: 'Stylist',
+  trip: 'Pack',
 }
 
 /** Tabs that need the forecast, and so trigger the geolocation prompt. */
@@ -238,6 +240,9 @@ export default function App() {
             onWear={openInStudio}
             onGoWardrobe={() => setTab('wardrobe')}
           />
+        )}
+        {tab === 'trip' && (
+          <Trip items={items} urls={urls} onGoWardrobe={() => setTab('wardrobe')} />
         )}
       </main>
     </div>

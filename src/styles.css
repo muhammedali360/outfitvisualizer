@@ -1278,6 +1278,131 @@ h3 .count {
   cursor: not-allowed;
 }
 
+
+/* ---------- trip ---------- */
+
+.stat-value {
+  font-size: 1.9rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.coverage-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.section-head.tight {
+  margin-bottom: 4px;
+  align-items: center;
+}
+
+.trip-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.trip-form input[type='search'],
+.trip-form input[type='date'] {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px 12px;
+  background: #fff;
+  font: inherit;
+  color: inherit;
+}
+
+.trip-form input:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.trip-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.place-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.pack-group {
+  margin-top: 12px;
+}
+
+.pack-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.pack-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 92px;
+  padding: 8px 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  font-size: 0.72rem;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.pack-item img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
+.pack-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.pack-item.packed {
+  border-color: var(--good);
+  background: #f1f7f1;
+}
+
+.pack-tick {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  color: var(--good);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.trip-days {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.trip-day {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 800px) {
@@ -1305,5 +1430,15 @@ h3 .count {
   .section-head {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+@media (max-width: 800px) {
+  .stat-value {
+    font-size: 1.5rem;
+  }
+
+  .trip-dates {
+    grid-template-columns: 1fr;
   }
 }
