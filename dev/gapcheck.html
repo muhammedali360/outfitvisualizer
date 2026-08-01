@@ -1,0 +1,261 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>gapcheck</title></head>
+  <body>
+    <pre id="out">running…</pre>
+    <script type="module">
+      import {
+        analyzeGaps,
+        coverage,
+        coverageGaps,
+        duplicateClusters,
+        nearDuplicate,
+        occasionGaps,
+        pairWorks,
+        ratioCheck,
+        recommendations,
+        strandedPieces,
+      } from '/src/lib/gaps.ts'
+
+      const results = []
+      const fail = []
+      function check(name, ok, detail = '') {
+        results.push(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`)
+        if (!ok) fail.push(name)
+      }
+
+      let seq = 0
+      function item(category, hex, colorName, over = {}) {
+        return {
+          id: `i${++seq}`,
+          name: `${colorName} ${category} ${seq}`,
+          category,
+          colors: [hex],
+          colorNames: [colorName],
+          warmth: 2,
+          formality: 1,
+          image: new Blob(),
+          createdAt: 0,
+          ...over,
+        }
+      }
+      const BLACK = ['#1a1a1a', 'black']
+      const WHITE = ['#f2f0ec', 'white']
+      const NAVY = ['#26324f', 'navy']
+      const RED = ['#c0392b', 'red']
+      const GREEN = ['#4a8c56', 'green']
+      const top = (c, over) => item('top', c[0], c[1], over)
+      const bottom = (c, over) => item('bottom', c[0], c[1], over)
+
+      // ---- the wearable bar
+      check('a neutral pairs with anything', pairWorks(top(BLACK), bottom(RED)))
+      check('red against green is a clash and does not count',
+        !pairWorks(top(RED), bottom(GREEN)),
+        `score bar is 70`)
+      check('a two-step formality jump does not count',
+        !pairWorks(top(BLACK, { formality: 1 }), bottom(WHITE, { formality: 3 })))
+      check('same-formality neutrals do count',
+        pairWorks(top(BLACK, { formality: 3 }), bottom(WHITE, { formality: 3 })))
+
+      // ---- coverage counts pairs, and never multiplies by shoes
+      const closet = [top(BLACK), top(RED), bottom(NAVY), bottom(GREEN)]
+      const cov = coverage(closet)
+      check('possible = tops × bottoms', cov.possible === 4, String(cov.possible))
+      check('working counts only pairings that hold up', cov.working === 3, String(cov.working))
+      check('coverage rate', cov.rate === 0.75, String(cov.rate))
+      // Adding shoes must not change the pairing count — that multiplication is
+      // exactly the inflation this module exists to avoid.
+      const withShoes = coverage([...closet, item('shoes', ...BLACK), item('shoes', ...WHITE)])
+      check('shoes do not multiply the count', withShoes.working === cov.working,
+        `${withShoes.working} vs ${cov.working}`)
+      check('coverage rate is null with no bottoms', coverage([top(BLACK)]).rate === null)
+
+      // ---- stranded pieces
+      const lonely = top(RED)
+      const strandedCloset = [lonely, top(BLACK), bottom(GREEN), bottom(GREEN), bottom(GREEN)]
+      const stranded = strandedPieces(strandedCloset)
+      check('a piece that pairs with nothing is stranded',
+        stranded.some(s => s.item.id === lonely.id), stranded.map(s => s.item.name).join(', '))
+      check('a neutral is never stranded',
+        !stranded.some(s => s.item.colorNames[0] === 'black'))
+      check('stranded reports the pool it was measured against',
+        stranded[0].of === 3, String(stranded[0].of))
+      // Nothing can be called stranded against a two-item sample.
+      check('too small a sample strands nothing',
+        strandedPieces([top(RED), bottom(GREEN), bottom(GREEN)]).length === 0)
+
+      // ---- near-duplicates
+      check('same colour, category, weight and dressiness is a duplicate',
+        nearDuplicate(top(BLACK), top(['#1c1c1e', 'black'])))
+      check('different category is not a duplicate',
+        !nearDuplicate(top(BLACK), bottom(BLACK)))
+      check('different dressiness is not a duplicate',
+        !nearDuplicate(top(BLACK, { formality: 1 }), top(BLACK, { formality: 3 })))
+      check('different weight is not a duplicate',
+        !nearDuplicate(top(BLACK, { warmth: 1 }), top(BLACK, { warmth: 3 })))
+      check('black and white are not duplicates', !nearDuplicate(top(BLACK), top(WHITE)))
+
+      const dupes = duplicateClusters([
+        top(BLACK),
+        top(['#202020', 'black']),
+        top(['#141414', 'black']),
+        top(RED),
+        bottom(NAVY),
+      ])
+      check('three black tees cluster together', dupes.length === 1 && dupes[0].items.length === 3,
+        `${dupes.length} cluster(s)`)
+      check('a lone piece is not a cluster',
+        !dupes.some(c => c.items.some(i => i.colorNames[0] === 'red')))
+      check('no duplicates in a varied closet',
+        duplicateClusters([top(BLACK), top(RED), top(GREEN)]).length === 0)
+      // Clustering compares against the first member, so a chain of small steps
+      // can't walk a cluster across the colour wheel.
+      const chain = duplicateClusters([
+        top(['#000000', 'black']),
+        top(['#303030', 'black']),
+        top(['#606060', 'gray']),
+        top(['#909090', 'gray']),
+      ])
+      check('clusters do not drift by chaining',
+        chain.every(c => c.items.length <= 2), chain.map(c => c.items.length).join('+'))
+
+      // ---- recommendations
+      // A closet of nothing but red tops: the useful advice is a neutral bottom,
+      // and it must not be a red one.
+      const redCloset = [top(RED), top(RED), top(RED), bottom(RED)]
+      const recs = recommendations(redCloset, 4)
+      check('recommends something', recs.length > 0)
+      check('every recommendation creates at least one pairing',
+        recs.every(r => r.gain > 0), recs.map(r => `${r.label}:${r.gain}`).join(', '))
+      check('never recommends a duplicate of what you own',
+        !recs.some(r => r.category === 'bottom' && r.colorName === 'red' && r.formality === 1 && r.warmth === 2),
+        recs.map(r => r.label).join(' | '))
+      check('only tops and bottoms are ranked — a garnish never outranks a course',
+        recs.every(r => r.category === 'top' || r.category === 'bottom'),
+        recs.map(r => r.category).join(', '))
+      check('at most two suggestions per category',
+        ['top', 'bottom'].every(c => recs.filter(r => r.category === c).length <= 2),
+        recs.map(r => r.category).join(', '))
+      check('no two recommendations share a colour',
+        new Set(recs.map(r => r.colorName)).size === recs.length,
+        recs.map(r => r.colorName).join(', '))
+      check('a red-only closet is told to get a bottom, not a hat',
+        recs[0].category === 'bottom', recs[0].label)
+      // gain is a count of counterparts, so it can never exceed the pool.
+      check('gain never exceeds the pool it was measured against',
+        recs.every(r => r.gain <= r.of), recs.map(r => `${r.gain}/${r.of}`).join(', '))
+      check('nothing is recommended against too small a pool',
+        recommendations([top(BLACK), bottom(NAVY)], 4).length === 0)
+
+      // The whole point of the duplicate filter: with every neutral bottom
+      // already owned, the top suggestion has to move on to something else.
+      const neutralHeavy = [
+        top(RED), top(GREEN), top(NAVY),
+        bottom(BLACK), bottom(WHITE), bottom(['#8a8a8a', 'gray']),
+        bottom(['#3d3d3d', 'charcoal']), bottom(NAVY), bottom(['#d3bd97', 'beige']),
+      ]
+      const neutralRecs = recommendations(neutralHeavy, 4)
+      check('does not re-suggest neutrals already owned at that weight and dressiness',
+        !neutralRecs.some(
+          r => r.category === 'bottom' && r.formality === 1 && r.warmth === 2 &&
+            ['black', 'white', 'gray', 'charcoal', 'navy', 'beige'].includes(r.colorName),
+        ),
+        neutralRecs.map(r => r.label).join(' | '))
+
+      // ---- coverage gaps: the extras, asked as "is there anything at all?"
+      const noShoes = [
+        top(BLACK, { formality: 3 }), top(WHITE, { formality: 3 }),
+        bottom(NAVY, { formality: 3 }), bottom(BLACK, { formality: 3 }),
+        item('shoes', ...BLACK, { formality: 1 }),
+        item('layer', ...NAVY, { formality: 3, warmth: 3 }),
+      ]
+      const cg = coverageGaps(noShoes)
+      check('casual trainers do not cover a dressy closet',
+        cg.some(g => g.category === 'shoes'), cg.map(g => g.text).join(' | '))
+      check('a matching jacket is not flagged',
+        !cg.some(g => g.category === 'layer' && g.text.includes('sits at')),
+        cg.map(g => g.text).join(' | '))
+
+      const shoesOneStepAway = coverageGaps([
+        top(BLACK, { formality: 3 }), top(WHITE, { formality: 3 }),
+        bottom(NAVY, { formality: 3 }), bottom(BLACK, { formality: 3 }),
+        item('shoes', ...BLACK, { formality: 2 }),
+        item('layer', ...NAVY, { formality: 3, warmth: 3 }),
+      ])
+      check('shoes one step away still count as covered',
+        !shoesOneStepAway.some(g => g.category === 'shoes'),
+        shoesOneStepAway.map(g => g.text).join(' | '))
+
+      check('no outer layer at all is flagged',
+        coverageGaps([top(BLACK), top(WHITE), bottom(NAVY), bottom(BLACK)])
+          .some(g => g.text.includes('No outer layer')))
+      check('only light jackets is flagged as nothing warm',
+        coverageGaps([
+          top(BLACK), top(WHITE), bottom(NAVY), bottom(BLACK),
+          item('layer', ...BLACK, { warmth: 1 }),
+        ]).some(g => g.text.includes('Nothing warm')))
+      check('a warm jacket clears the warmth gap',
+        !coverageGaps([
+          top(BLACK), top(WHITE), bottom(NAVY), bottom(BLACK),
+          item('layer', ...BLACK, { warmth: 3 }),
+        ]).some(g => g.text.includes('Nothing warm')))
+      // One dressy shirt is not a demand signal.
+      check('a lone dressy piece does not demand dress shoes',
+        !coverageGaps([
+          top(BLACK, { formality: 3 }), top(WHITE), bottom(NAVY), bottom(BLACK),
+          item('shoes', ...BLACK, { formality: 1 }), item('layer', ...BLACK, { warmth: 3 }),
+        ]).some(g => g.category === 'shoes'))
+      check('too small a closet is not lectured about coverage',
+        coverageGaps([top(BLACK), bottom(NAVY)]).length === 0)
+
+      // ---- occasion supply vs demand
+      const occCloset = [
+        top(BLACK, { formality: 1 }),
+        top(BLACK, { formality: 1 }),
+        top(BLACK, { formality: 1 }),
+        top(BLACK, { formality: 2 }),
+      ]
+      const occDays = [
+        { date: '2026-01-01', items: { top: occCloset[3].id }, worn: true, updatedAt: 0 },
+        { date: '2026-01-02', items: { top: occCloset[3].id }, worn: true, updatedAt: 0 },
+        { date: '2026-01-03', items: { top: occCloset[3].id }, worn: true, updatedAt: 0 },
+        { date: '2026-01-04', items: { top: occCloset[0].id }, worn: true, updatedAt: 0 },
+      ]
+      const occ = occasionGaps(occCloset, occDays)
+      const smart = occ.find(o => o.formality === 2)
+      check('closet share is measured off the closet', smart.closetShare === 0.25, String(smart.closetShare))
+      check('wear share is measured off the log', smart.wearShare === 0.75, String(smart.wearShare))
+      check('positive gap means leant on harder than owned',
+        Math.abs(smart.gap - 0.5) < 1e-9, String(smart.gap))
+      check('the shares each sum to 1',
+        Math.abs(occ.reduce((s, o) => s + o.closetShare, 0) - 1) < 1e-9 &&
+          Math.abs(occ.reduce((s, o) => s + o.wearShare, 0) - 1) < 1e-9)
+      check('occasion gaps are null with nothing logged', occasionGaps(occCloset, []) === null)
+      check('planned-but-unworn days do not count',
+        occasionGaps(occCloset, [{ date: '2026-02-01', items: { top: occCloset[0].id }, worn: false, updatedAt: 0 }]) === null)
+
+      // ---- ratio
+      check('3 tops to 1 bottom is balanced',
+        ratioCheck([top(BLACK), top(RED), top(NAVY), bottom(BLACK)]).verdict === 'balanced')
+      check('1 top to 2 bottoms is thin on tops',
+        ratioCheck([top(BLACK), bottom(BLACK), bottom(NAVY)]).verdict === 'thin-on-tops')
+      check('8 tops to 1 bottom is thin on bottoms',
+        ratioCheck([...Array.from({ length: 8 }, () => top(BLACK)), bottom(BLACK)]).verdict ===
+          'thin-on-bottoms')
+      check('no bottoms yields a null ratio', ratioCheck([top(BLACK)]).ratio === null)
+
+      // ---- the whole report skips the laundry
+      const withLaundry = [top(BLACK), top(RED, { unavailable: true }), bottom(NAVY), bottom(GREEN)]
+      const report = analyzeGaps(withLaundry, [])
+      check('pieces in the wash sit out of the analysis',
+        report.skipped === 1 && report.coverage.tops === 1,
+        `skipped ${report.skipped}, tops ${report.coverage.tops}`)
+      check('occasion gaps are null with no wear log', report.occasions === null)
+
+      document.getElementById('out').textContent =
+        results.join('\n') + `\n\n${fail.length ? 'FAILURES: ' + fail.length : 'ALL PASS'}`
+      window.__done = true
+      window.__fail = fail.length
+    </script>
+  </body>
+</html>
